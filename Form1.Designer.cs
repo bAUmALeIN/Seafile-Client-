@@ -28,6 +28,7 @@
         /// </summary>
         private void InitializeComponent()
         {
+            System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             lblStatus = new Label();
             lstRepos = new ReaLTaiizor.Controls.MaterialListView();
             panelSIdebar = new Panel();
@@ -36,6 +37,7 @@
             panelActionbar = new Panel();
             materialButton3 = new ReaLTaiizor.Controls.MaterialButton();
             materialButton2 = new ReaLTaiizor.Controls.MaterialButton();
+            materialButton1 = new ReaLTaiizor.Controls.MaterialButton();
             panelSIdebar.SuspendLayout();
             panelActionbar.SuspendLayout();
             SuspendLayout();
@@ -126,6 +128,7 @@
             // panelActionbar
             // 
             panelActionbar.BackColor = SystemColors.ActiveBorder;
+            panelActionbar.Controls.Add(materialButton1);
             panelActionbar.Controls.Add(materialButton3);
             panelActionbar.Controls.Add(materialButton2);
             panelActionbar.Dock = DockStyle.Top;
@@ -174,6 +177,26 @@
             materialButton2.UseAccentColor = false;
             materialButton2.UseVisualStyleBackColor = true;
             // 
+            // materialButton1
+            // 
+            materialButton1.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            materialButton1.Density = ReaLTaiizor.Controls.MaterialButton.MaterialButtonDensity.Default;
+            materialButton1.Depth = 0;
+            materialButton1.HighEmphasis = true;
+            materialButton1.Icon = (Image)resources.GetObject("materialButton1.Icon");
+            materialButton1.IconType = ReaLTaiizor.Controls.MaterialButton.MaterialIconType.Rebase;
+            materialButton1.Location = new Point(1352, 15);
+            materialButton1.Margin = new Padding(4, 6, 4, 6);
+            materialButton1.MouseState = ReaLTaiizor.Helper.MaterialDrawHelper.MaterialMouseState.HOVER;
+            materialButton1.Name = "materialButton1";
+            materialButton1.NoAccentTextColor = Color.Empty;
+            materialButton1.Size = new Size(107, 36);
+            materialButton1.TabIndex = 11;
+            materialButton1.Text = "Suchen";
+            materialButton1.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Outlined;
+            materialButton1.UseAccentColor = false;
+            materialButton1.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
@@ -205,5 +228,6 @@
         private ReaLTaiizor.Controls.ParrotPictureBox parrotPictureBoxLogo;
         private ReaLTaiizor.Controls.MaterialButton materialButton3;
         private ReaLTaiizor.Controls.MaterialButton materialButton2;
+        private ReaLTaiizor.Controls.MaterialButton materialButton1;
     }
 }

@@ -1,16 +1,19 @@
-﻿using System.Drawing;
-using System.Windows.Forms;
+﻿using ReaLTaiizor.Colors;
 using ReaLTaiizor.Controls;
+using ReaLTaiizor.Forms;
+using ReaLTaiizor.Manager;
+using ReaLTaiizor.Util;
+using System.Drawing;
+using System.Windows.Forms;
 using WinFormsApp3.Data;
 
 namespace WinFormsApp3
 {
     public static class UiHelper
     {
-
         public static void SetupListView(MaterialListView listView)
         {
-            // Icons 
+            // Icons
             ImageList imgList = new ImageList();
             imgList.ImageSize = new Size(24, 24);
             imgList.ColorDepth = ColorDepth.Depth32Bit;
@@ -18,21 +21,23 @@ namespace WinFormsApp3
             imgList.Images.Add("file", SystemIcons.WinLogo);
             listView.SmallImageList = imgList;
 
-            // Spalten 
+            // Spalten definieren (Jetzt mit Datum!)
             listView.Columns.Clear();
-            listView.Columns.Add("", 40);         // Icon
-            listView.Columns.Add("Name", 300);    // Name
-            listView.Columns.Add("Größe", 100);   // Größe
-            listView.Columns.Add("Typ", 80);      // Typ
+            listView.Columns.Add("", 40);          // Icon
+            listView.Columns.Add("Name", 300);     // Name
+            listView.Columns.Add("Größe", 100);    // Größe
+            listView.Columns.Add("Geändert", 150); // NEU: Datum
+            listView.Columns.Add("Typ", 80);       // Typ
         }
 
         public static void UpdateColumnWidths(MaterialListView listView)
         {
-            if (listView.Columns.Count < 4 || listView.ClientSize.Width == 0) return;
+            // Wir prüfen auf < 5 Spalten (weil wir jetzt eine mehr haben)
+            if (listView.Columns.Count < 5 || listView.ClientSize.Width == 0) return;
 
-            int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width;
+            // Feste Breite: Icon + Größe + Datum + Typ
+            int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width + listView.Columns[4].Width;
 
-            // Scrollbar-Check
             bool hasVerticalScroll = false;
             if (listView.Items.Count > 0)
             {
@@ -49,34 +54,125 @@ namespace WinFormsApp3
                 listView.Columns[1].Width = availableWidth;
         }
 
-        public static string ShowInputDialog(string title, string promptText)
+
+        public static string ShowInputDialog(string title, string hintText)
         {
-            Form prompt = new Form()
-            {
-                Width = 400,
-                Height = 180,
-                FormBorderStyle = FormBorderStyle.FixedDialog,
-                Text = title,
-                StartPosition = FormStartPosition.CenterScreen,
-                TopMost = true,
-                MinimizeBox = false,
-                MaximizeBox = false
-            };
+            MaterialForm prompt = new MaterialForm();
+            prompt.Width = 500;
+            prompt.Height = 240;
+            prompt.Text = title;
+            prompt.StartPosition = FormStartPosition.CenterParent;
+            prompt.Sizable = false;
 
-            Label textLabel = new Label() { Left = 20, Top = 20, Text = promptText, AutoSize = true };
-            TextBox textBox = new TextBox() { Left = 20, Top = 50, Width = 340 };
-            System.Windows.Forms.Button confirmation = new System.Windows.Forms.Button() { Text = "Ok", Left = 240, Width = 100, Top = 90, DialogResult = DialogResult.OK };
+            var materialSkinManager = MaterialSkinManager.Instance;
+            materialSkinManager.AddFormToManage(prompt);
 
-            confirmation.BackColor = Color.Orange;
-            confirmation.ForeColor = Color.Black;
-            confirmation.FlatStyle = FlatStyle.Flat;
+            MaterialTextBoxEdit textBox = new MaterialTextBoxEdit();
+            textBox.Hint = hintText;
+            textBox.Location = new Point(20, 90);
+            textBox.Width = 460;
+            textBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+            MaterialButton btnOk = new MaterialButton();
+            btnOk.Text = "OK";
+            btnOk.Type = MaterialButton.MaterialButtonType.Contained;
+            btnOk.UseAccentColor = true;
+            btnOk.DialogResult = DialogResult.OK;
+            btnOk.Location = new Point(390, 180);
+            btnOk.AutoSize = false;
+            btnOk.Size = new Size(90, 36);
+            btnOk.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+
+            MaterialButton btnCancel = new MaterialButton();
+            btnCancel.Text = "Abbrechen";
+            btnCancel.Type = MaterialButton.MaterialButtonType.Outlined;
+            btnCancel.DialogResult = DialogResult.Cancel;
+            btnCancel.Location = new Point(280, 180);
+            btnCancel.AutoSize = false;
+            btnCancel.Size = new Size(100, 36);
+            btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
 
             prompt.Controls.Add(textBox);
-            prompt.Controls.Add(confirmation);
-            prompt.Controls.Add(textLabel);
-            prompt.AcceptButton = confirmation;
+            prompt.Controls.Add(btnOk);
+            prompt.Controls.Add(btnCancel);
+
+            prompt.AcceptButton = btnOk;
+            prompt.CancelButton = btnCancel;
 
             return prompt.ShowDialog() == DialogResult.OK ? textBox.Text : "";
         }
+
+        // --- NEU: Roter Warn-Dialog für Löschen ---
+        public static bool ShowDangerConfirmation(string title, string message)
+        {
+            var skinManager = MaterialSkinManager.Instance;
+
+            // 1. Altes Farbschema speichern
+            var oldScheme = skinManager.ColorScheme;
+
+            // 2. Auf ROTES Warn-Schema umschalten
+            skinManager.ColorScheme = new MaterialColorScheme(
+                MaterialPrimary.Red500,
+                MaterialPrimary.Red700,
+                MaterialPrimary.Red200,
+                MaterialAccent.Red400,
+                MaterialTextShade.WHITE
+            );
+
+            // 3. Dialog bauen
+            MaterialForm prompt = new MaterialForm();
+            prompt.Width = 500;
+            prompt.Height = 250;
+            prompt.Text = title;
+            prompt.StartPosition = FormStartPosition.CenterParent;
+            prompt.Sizable = false;
+
+            skinManager.AddFormToManage(prompt);
+
+            // Warntext (Label)
+            MaterialLabel lblMsg = new MaterialLabel();
+            lblMsg.Text = message;
+            lblMsg.Location = new Point(20, 80);
+            lblMsg.Size = new Size(460, 100);
+            lblMsg.FontType = MaterialSkinManager.FontType.Body1;
+            lblMsg.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+
+            // LÖSCHEN Button (Rot, ausgefüllt)
+            MaterialButton btnDelete = new MaterialButton();
+            btnDelete.Text = "LÖSCHEN";
+            btnDelete.Type = MaterialButton.MaterialButtonType.Contained;
+            btnDelete.UseAccentColor = false; // Nutzt Primary Color (jetzt Rot)
+            btnDelete.DialogResult = DialogResult.OK;
+            btnDelete.Location = new Point(370, 190);
+            btnDelete.AutoSize = false;
+            btnDelete.Size = new Size(110, 36);
+            btnDelete.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+
+            // Abbrechen Button
+            MaterialButton btnCancel = new MaterialButton();
+            btnCancel.Text = "Abbrechen";
+            btnCancel.Type = MaterialButton.MaterialButtonType.Outlined;
+            btnCancel.DialogResult = DialogResult.Cancel;
+            btnCancel.Location = new Point(250, 190);
+            btnCancel.AutoSize = false;
+            btnCancel.Size = new Size(110, 36);
+            btnCancel.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
+
+            prompt.Controls.Add(lblMsg);
+            prompt.Controls.Add(btnDelete);
+            prompt.Controls.Add(btnCancel);
+
+            prompt.AcceptButton = btnDelete;
+            prompt.CancelButton = btnCancel;
+
+            // 4. Anzeigen
+            var result = prompt.ShowDialog();
+
+            // 5. WICHTIG: Altes Farbschema (Orange) wiederherstellen
+            skinManager.ColorScheme = oldScheme;
+
+            return result == DialogResult.OK;
+        }
+
     }
 }

@@ -22,6 +22,7 @@ namespace WinFormsApp3.Data
         public string id { get; set; }
         public string name { get; set; }
         public long size { get; set; }
+        public long mtime { get; set; }
 
     }
 
@@ -31,6 +32,6 @@ namespace WinFormsApp3.Data
         public string name { get; set; }
         public string type { get; set; } 
         public long size { get; set; }
-        public string modtime { get; set; } 
+        public long mtime { get; set; }
     }
 }

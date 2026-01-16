@@ -56,6 +56,21 @@ namespace WinFormsApp3.Data
         }
 
 
+
+        public async Task<bool> CreateLibraryAsync(string name)
+        {
+            string url = AppConfig.ApiBaseUrl + "repos/";
+
+            var formData = new List<KeyValuePair<string, string>>
+            {
+                new KeyValuePair<string, string>("name", name)
+            };
+
+            var content = new FormUrlEncodedContent(formData);
+            var response = await _httpClient.PostAsync(url, content);
+
+            return response.IsSuccessStatusCode;
+        }
         public async Task<bool> CreateDirectoryAsync(string repoId, string path)
         {
             // Seafile API: POST /api2/repos/{repo_id}/dir/?p={path} mit operation=mkdir
@@ -82,6 +97,16 @@ namespace WinFormsApp3.Data
             string url = $"{AppConfig.ApiBaseUrl}repos/{repoId}/{type}/?p={encodedPath}";
 
             var response = await _httpClient.DeleteAsync(url);
+            return response.IsSuccessStatusCode;
+        }
+
+        public async Task<bool> DeleteLibraryAsync(string repoId)
+        {
+            // DELETE /api2/repos/{repo_id}/
+            string url = $"{AppConfig.ApiBaseUrl}repos/{repoId}/";
+
+            var response = await _httpClient.DeleteAsync(url);
+
             return response.IsSuccessStatusCode;
         }
     }

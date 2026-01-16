@@ -20,24 +20,21 @@ namespace WinFormsApp3
         {
             InitializeComponent();
             _authToken = token;
-            _navState = new NavigationState(); 
-
+            _navState = new NavigationState();
 
             SetupMaterialSkin();
+
             UiHelper.SetupListView(lstRepos);
 
-
             lstRepos.DoubleClick += lstRepos_DoubleClick;
-
             lstRepos.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(lstRepos);
-
             lstRepos.ColumnWidthChanging += (s, e) => { e.Cancel = true; e.NewWidth = lstRepos.Columns[e.ColumnIndex].Width; };
 
-
+            // Buttons
             materialButton2.Click += BtnNew_Click;
             materialButton3.Click += BtnDelete_Click;
 
-            // Panels Farben fixen
+            // Farben
             try { if (Controls.ContainsKey("panelSidebar")) Controls["panelSidebar"].BackColor = Color.FromArgb(45, 45, 48); } catch { }
             try { if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].BackColor = Color.FromArgb(45, 45, 48); } catch { }
             try { if (Controls.ContainsKey("parrotPictureBoxLogo")) parrotPictureBoxLogo.BackColor = Color.FromArgb(45, 45, 48); } catch { }
@@ -62,7 +59,13 @@ namespace WinFormsApp3
             await LadeInhalt();
         }
 
-        
+        // Helfer zum Umwandeln des Datums
+        private string FormatDate(long timestamp)
+        {
+            if (timestamp == 0) return "-";
+            return DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime().ToString("g"); // g = Kurzformat Datum+Zeit
+        }
+
         private async Task LadeInhalt()
         {
             try
@@ -73,13 +76,14 @@ namespace WinFormsApp3
 
                 if (_navState.IsInRoot)
                 {
-                    // Bibliotheken laden
+                    // --- Bibliotheken laden ---
                     var repos = await _seafileClient.GetLibrariesAsync();
                     foreach (var repo in repos)
                     {
                         var item = new ListViewItem("📚");
                         item.SubItems.Add(repo.name);
                         item.SubItems.Add((repo.size / 1024 / 1024) + " MB");
+                        item.SubItems.Add(FormatDate(repo.mtime)); // Datum
                         item.SubItems.Add("Repo");
                         item.Tag = repo;
                         lstRepos.Items.Add(item);
@@ -88,14 +92,14 @@ namespace WinFormsApp3
                 }
                 else
                 {
-                    // Ordner Inhalt laden
+                    // --- Ordner Inhalt laden ---
                     var entries = await _seafileClient.GetDirectoryEntriesAsync(_navState.CurrentRepoId, _navState.CurrentPath);
 
-                    
                     var backItem = new ListViewItem("🔙");
                     backItem.SubItems.Add(".. [Zurück]");
-                    backItem.SubItems.Add(""); // Größe leer
-                    backItem.SubItems.Add(""); // Typ leer
+                    backItem.SubItems.Add("");
+                    backItem.SubItems.Add(""); // Datum leer
+                    backItem.SubItems.Add("");
                     backItem.Tag = new SeafileEntry { type = "back" };
                     lstRepos.Items.Add(backItem);
 
@@ -104,8 +108,12 @@ namespace WinFormsApp3
                         string icon = entry.type == "dir" ? "📁" : "📄";
                         var item = new ListViewItem(icon);
                         item.SubItems.Add(entry.name);
+
                         string sizeText = entry.type == "dir" ? "-" : (entry.size / 1024) + " KB";
                         item.SubItems.Add(sizeText);
+
+                        item.SubItems.Add(FormatDate(entry.mtime)); // Datum
+
                         item.SubItems.Add(entry.type);
                         item.Tag = entry;
                         lstRepos.Items.Add(item);
@@ -121,8 +129,6 @@ namespace WinFormsApp3
                 MessageBox.Show("Fehler: " + ex.Message);
             }
         }
-
-        // --- Event Handler ---
 
         private async void lstRepos_DoubleClick(object sender, EventArgs e)
         {
@@ -149,38 +155,58 @@ namespace WinFormsApp3
             }
         }
 
-
+        // --- BUTTON: NEU (Intelligent: Bibliothek oder Ordner) ---
         private async void BtnNew_Click(object sender, EventArgs e)
         {
+            // Unterscheidung: Sind wir ganz oben (Bibliotheken) oder in einem Ordner?
             if (_navState.IsInRoot)
             {
-                MessageBox.Show("Bitte wähle zuerst eine Bibliothek aus.");
-                return;
+                // ==> Neue Bibliothek erstellen
+                string libName = UiHelper.ShowInputDialog("Neue Bibliothek", "Name der Bibliothek:");
+                if (!string.IsNullOrWhiteSpace(libName))
+                {
+                    lblStatus.Text = "Erstelle Bibliothek...";
+                    bool success = await _seafileClient.CreateLibraryAsync(libName);
+                    if (success)
+                    {
+                        await LadeInhalt();
+                        lblStatus.Text = "Bibliothek erstellt.";
+                    }
+                    else
+                        MessageBox.Show("Fehler beim Erstellen der Bibliothek.");
+                }
             }
-
-            string folderName = UiHelper.ShowInputDialog("Neuer Ordner", "Name des Ordners:");
-            if (!string.IsNullOrWhiteSpace(folderName))
+            else
             {
-                string newPath = _navState.CurrentPath.EndsWith("/")
-                    ? _navState.CurrentPath + folderName
-                    : _navState.CurrentPath + "/" + folderName;
+                // ==> Neuen Ordner erstellen (wie bisher)
+                string folderName = UiHelper.ShowInputDialog("Neuer Ordner", "Name des Ordners:");
+                if (!string.IsNullOrWhiteSpace(folderName))
+                {
+                    string newPath = _navState.CurrentPath.EndsWith("/")
+                        ? _navState.CurrentPath + folderName
+                        : _navState.CurrentPath + "/" + folderName;
 
-                bool success = await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newPath);
+                    bool success = await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newPath);
 
-                if (success) await LadeInhalt();
-                else MessageBox.Show("Fehler beim Erstellen.");
+                    if (success) await LadeInhalt();
+                    else MessageBox.Show("Fehler beim Erstellen.");
+                }
             }
         }
-
 
         private async void BtnDelete_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count == 0) return;
             var tag = lstRepos.SelectedItems[0].Tag;
 
+            // Fall 1: Datei oder Ordner löschen (wie bisher)
             if (tag is SeafileEntry entry && entry.type != "back")
             {
-                if (MessageBox.Show($"'{entry.name}' wirklich löschen?", "Löschen", MessageBoxButtons.YesNo, MessageBoxIcon.Warning) == DialogResult.Yes)
+                // Kleiner Dialog für Dateien (hier nutzen wir auch das neue DangerPopup oder eine normale MessageBox, wie du willst)
+                // Ich nehme hier auch das neue schicke Popup, sieht konsistenter aus
+                bool confirm = UiHelper.ShowDangerConfirmation("Datei löschen", $"Möchtest du '{entry.name}' wirklich löschen?");
+
+                if (confirm)
                 {
                     string pathToDelete = _navState.CurrentPath.EndsWith("/")
                         ? _navState.CurrentPath + entry.name
@@ -193,9 +219,31 @@ namespace WinFormsApp3
                     else MessageBox.Show("Fehler beim Löschen.");
                 }
             }
-            else
+            // Fall 2: Bibliothek löschen (JETZT AKTIVIERT) 🚨
+            else if (tag is SeafileRepo repo)
             {
-                MessageBox.Show("Bitte eine Datei oder Ordner auswählen (nicht Bibliotheken).");
+                // Das knallrote Warnfenster aufrufen
+                bool confirm = UiHelper.ShowDangerConfirmation(
+                    "⚠️ BIBLIOTHEK LÖSCHEN ⚠️",
+                    $"ACHTUNG: Möchtest du die Bibliothek '{repo.name}' wirklich unwiderruflich löschen?\n\nAlle darin enthaltenen Dateien werden DAUERHAFT gelöscht!"
+                );
+
+                if (confirm)
+                {
+                    lblStatus.Text = "Lösche Bibliothek...";
+                    bool success = await _seafileClient.DeleteLibraryAsync(repo.id);
+
+                    if (success)
+                    {
+                        await LadeInhalt(); // Liste neu laden
+                        lblStatus.Text = "Bibliothek gelöscht.";
+                    }
+                    else
+                    {
+                        MessageBox.Show("Fehler: Bibliothek konnte nicht gelöscht werden.");
+                        lblStatus.Text = "Fehler.";
+                    }
+                }
             }
         }
 
@@ -213,8 +261,6 @@ namespace WinFormsApp3
                 catch { }
             }
         }
-
-        // --- Override ---
 
         protected override void OnResize(EventArgs e)
         {
