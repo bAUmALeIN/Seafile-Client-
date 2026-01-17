@@ -233,5 +233,35 @@ namespace WinFormsApp3.Data
                 }
             }
         }
+
+        // --- DOWNLOAD METHODEN ---
+
+        public async Task<string> GetDownloadLinkAsync(string repoId, string path)
+        {
+            // Pfad kodieren (z.B. Leerzeichen -> %20)
+            string encodedPath = System.Net.WebUtility.UrlEncode(path);
+            string url = $"{AppConfig.ApiBaseUrl}repos/{repoId}/download-link/?p={encodedPath}";
+
+            var response = await _httpClient.GetAsync(url);
+            if (response.IsSuccessStatusCode)
+            {
+                // Der Link kommt als reiner String in Anführungszeichen zurück
+                string link = await response.Content.ReadAsStringAsync();
+                return link.Trim('"');
+            }
+            return null;
+        }
+
+        public async Task<byte[]> DownloadFileContentAsync(string downloadLink)
+        {
+            // Datei herunterladen
+            var response = await _httpClient.GetAsync(downloadLink);
+            if (response.IsSuccessStatusCode)
+            {
+                return await response.Content.ReadAsByteArrayAsync();
+            }
+            throw new Exception("Download fehlgeschlagen: " + response.StatusCode);
+        }
+
     }
 }
