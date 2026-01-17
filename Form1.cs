@@ -30,6 +30,12 @@ namespace WinFormsApp3
             lstRepos.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(lstRepos);
             lstRepos.ColumnWidthChanging += (s, e) => { e.Cancel = true; e.NewWidth = lstRepos.Columns[e.ColumnIndex].Width; };
 
+
+            lstRepos.AllowDrop = true;
+
+            lstRepos.DragEnter += LstRepos_DragEnter;
+            lstRepos.DragDrop += LstRepos_DragDrop;
+
             // Buttons
             materialButton2.Click += BtnNew_Click;
             materialButton3.Click += BtnDelete_Click;
@@ -273,5 +279,100 @@ namespace WinFormsApp3
             base.OnShown(e);
             this.Activate();
         }
+
+
+
+     
+        private void LstRepos_DragEnter(object sender, DragEventArgs e)
+        {
+           // Prüfen: Ist das, was da gezogen wird, eine Datei?
+           if (e.Data.GetDataPresent(DataFormats.FileDrop))
+            e.Effect = DragDropEffects.Copy; // Ja -> Mauszeiger ändern
+           else
+            e.Effect = DragDropEffects.None; // Nein -> Verboten-Schild
+        }
+
+        private async void LstRepos_DragDrop(object sender, DragEventArgs e)
+        {
+            if (_navState.IsInRoot)
+            {
+                MessageBox.Show("Bitte öffne erst eine Bibliothek.");
+                return;
+            }
+
+            string[] droppedPaths = (string[])e.Data.GetData(DataFormats.FileDrop);
+
+            if (droppedPaths != null && droppedPaths.Length > 0)
+            {
+                try
+                {
+                    // Wir holen den Link jetzt NICHT mehr hier oben global, 
+                    // sondern frisch für jede Datei unten in der Rekursion.
+
+                    foreach (string path in droppedPaths)
+                    {
+                        // Startet die Rekursion für den aktuellen Pfad
+                        await ProcessDropEntryRecursive(path, _navState.CurrentPath);
+                    }
+
+                    await LadeInhalt();
+                    lblStatus.Text = "Upload komplett fertig.";
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show("Fehler: " + ex.Message);
+                }
+            }
+        }
+
+        // Die schlaue Rekursions-Methode
+        private async Task ProcessDropEntryRecursive(string localPath, string remoteTargetFolder)
+        {
+            // Prüfen: Datei oder Ordner?
+            FileAttributes attr = File.GetAttributes(localPath);
+
+            if (attr.HasFlag(FileAttributes.Directory))
+            {
+                // === ES IST EIN ORDNER ===
+                string folderName = new DirectoryInfo(localPath).Name;
+
+                // Pfad bauen (Achtung auf Slashes)
+                string newRemotePath = remoteTargetFolder.EndsWith("/")
+                    ? remoteTargetFolder + folderName
+                    : remoteTargetFolder + "/" + folderName;
+
+                lblStatus.Text = $"Erstelle Ordner: {folderName}...";
+
+                // Ordner auf Server erstellen
+                await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newRemotePath);
+
+                // Inhalt holen und weiter abtauchen (Rekursion)
+                string[] entries = Directory.GetFileSystemEntries(localPath);
+                foreach (string entry in entries)
+                {
+                    // Wir tauchen tiefer, geben aber KEINEN Link mit. 
+                    // Der wird erst geholt, wenn wir auf eine Datei treffen.
+                    await ProcessDropEntryRecursive(entry, newRemotePath);
+                }
+            }
+            else
+            {
+                // === ES IST EINE DATEI ===
+                string fileName = Path.GetFileName(localPath);
+
+                // JETZT holen wir das Ticket exakt für diesen Ziel-Ordner!
+                // Das verhindert den "Permission Denied" Fehler.
+                string freshUploadLink = await _seafileClient.GetUploadLinkAsync(_navState.CurrentRepoId, remoteTargetFolder);
+
+                if (!string.IsNullOrEmpty(freshUploadLink))
+                {
+                    lblStatus.Text = $"Lade hoch: {fileName}...";
+                    await _seafileClient.UploadFileAsync(freshUploadLink, localPath, remoteTargetFolder, fileName);
+                }
+            }
+        }
+
+
+
     }
 }
