@@ -24,6 +24,9 @@ namespace WinFormsApp3.Data
         public long size { get; set; }
         public long mtime { get; set; }
 
+        public string type { get; set; } // "repo", "srepo" (freigegeben), "grepo" (Gruppe)
+        public string owner { get; set; }
+
     }
 
     public class SeafileEntry
@@ -33,5 +36,21 @@ namespace WinFormsApp3.Data
         public string type { get; set; } 
         public long size { get; set; }
         public long mtime { get; set; }
+        public string parent_dir { get; set; }
     }
+
+    public class DownloadItem
+    {
+        public string Id { get; set; } = Guid.NewGuid().ToString(); // Eindeutige ID
+        public string FileName { get; set; }
+        public string Type { get; set; } // "Datei", "Ordner (Zip)", "Ordner (Turbo)"
+        public long TotalSize { get; set; } // Optional
+        public string Status { get; set; } = "Wartet..."; // "Lädt...", "Fertig", "Fehler"
+        public int Progress { get; set; } = 0; // 0 bis 100
+        public DateTime StartTime { get; set; } = DateTime.Now;
+
+        // Hilfsfeld für UI-Update (damit wir wissen, welches ListViewItem dazu gehört)
+        public object Tag { get; set; }
+    }
+
 }
