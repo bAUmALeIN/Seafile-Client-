@@ -52,11 +52,11 @@ namespace WinFormsApp3
             InitializeIcons();
             InitializeTabs();
             InitializeCustomUI();
-            InitializeLogo(); // Logo Setup am Ende
+            InitializeLogo();
         }
 
         // =========================================================================
-        // HELPER KLASSE: Stabilisiertes Label
+        // HELPER KLASSE: Stabilisiertes Label (für Breadcrumbs)
         // =========================================================================
         private class StableLabel : Label
         {
@@ -77,6 +77,22 @@ namespace WinFormsApp3
             }
         }
 
+        // =========================================================================
+        // NEU & WICHTIG: Stabilisierter Button (Verhindert Font-Reset beim Klick)
+        // =========================================================================
+        private class StableButton : System.Windows.Forms.Button
+        {
+            protected override void OnFontChanged(EventArgs e)
+            {
+                base.OnFontChanged(e);
+                // Wenn das Theme versucht, die Schrift zu ändern (z.B. bold weg), erzwingen wir es zurück
+                if (this.Font != null && !this.Font.Bold)
+                {
+                    this.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
+                }
+            }
+        }
+
         private void SetupMaterialSkin()
         {
             var materialSkinManager = MaterialSkinManager.Instance;
@@ -92,12 +108,9 @@ namespace WinFormsApp3
             );
         }
 
-        // =========================================================================
-        // NEU: LOGO RECHTS IN DER ACTIONBAR
-        // =========================================================================
         private void InitializeLogo()
         {
-            // 1. Panel suchen (es liegt jetzt in tabFiles)
+            // 1. Panel suchen
             Control actionPanel = null;
             if (_tabFiles.Controls.ContainsKey("panelActionbar"))
                 actionPanel = _tabFiles.Controls["panelActionbar"];
@@ -111,10 +124,7 @@ namespace WinFormsApp3
             catch { _appIcon.Image = Properties.Resources.icon_repo; }
 
             _appIcon.SizeMode = PictureBoxSizeMode.Zoom;
-
-            // TRICK: Da das Parent jetzt das Panel ist, funktioniert Transparent!
-            _appIcon.BackColor = Color.Transparent;
-
+            _appIcon.BackColor = Color.Transparent; // Funktioniert jetzt, da im Panel
             _appIcon.Size = new Size(40, 40);
 
             // Position: Ganz rechts im Panel
@@ -122,13 +132,11 @@ namespace WinFormsApp3
             int y = (actionPanel.Height - _appIcon.Height) / 2;
 
             _appIcon.Location = new Point(x, y);
-            _appIcon.Anchor = AnchorStyles.Top | AnchorStyles.Right; // Klebt rechts fest
+            _appIcon.Anchor = AnchorStyles.Top | AnchorStyles.Right;
 
-            // Wichtig: Zum Panel hinzufügen, nicht zur Form!
             actionPanel.Controls.Add(_appIcon);
             _appIcon.BringToFront();
 
-            // Titel ohne Leerzeichen, da Logo jetzt rechts ist
             this.Text = "BBS-ME File Explorer";
         }
 
@@ -423,10 +431,9 @@ namespace WinFormsApp3
             actionPanel.Controls.Add(btnDel);
 
             // =========================================================
-            // RECHTS (Angepasst für Logo Platz)
+            // RECHTS
             // =========================================================
-
-            // Logo ist ca. 40-50px breit. Wir schieben die Buttons um 60px nach links vom Rand.
+            // Logo ist ca. 40px breit + 10px Puffer = 50px
             int rightEdge = actionPanel.Width - 60;
 
             System.Windows.Forms.Button btnOut = CreateFlatButton("AUSLOGGEN", Properties.Resources.icon_logout);
@@ -444,7 +451,8 @@ namespace WinFormsApp3
 
         private System.Windows.Forms.Button CreateFlatButton(string text, Image icon)
         {
-            System.Windows.Forms.Button btn = new System.Windows.Forms.Button();
+            // FIX: Verwendung von StableButton statt Button
+            System.Windows.Forms.Button btn = new StableButton();
 
             btn.Text = " " + text;
             btn.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
