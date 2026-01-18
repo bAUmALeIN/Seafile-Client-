@@ -10,7 +10,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
-using System.Windows.Forms; // WICHTIG für TabPage
+using System.Windows.Forms;
 using WinFormsApp3.Data;
 
 namespace WinFormsApp3
@@ -22,18 +22,22 @@ namespace WinFormsApp3
         private readonly string _authToken;
         private DownloadManager _downloadManager;
 
-        // UI Variablen
         private MaterialTabControl _tabControl;
         private MaterialTabSelector _tabSelector;
-
-        // FIX: Explizit System.Windows.Forms.TabPage nutzen -> Keine Mehrdeutigkeit mehr!
         private System.Windows.Forms.TabPage _tabFiles;
         private System.Windows.Forms.TabPage _tabDownloads;
-
         private MaterialListView _lstDownloads;
+
+        private FlowLayoutPanel _flowPath;
+        private ImageList _repoIcons;
+        private PictureBox _appIcon;
+
+        // WICHTIG: Schriftarten Global
+        private readonly Font _crumbFontBold = new Font("Segoe UI", 11f, FontStyle.Bold);
 
         public Form1(string token)
         {
+            this.StartPosition = FormStartPosition.CenterScreen;
             InitializeComponent();
             _authToken = token;
             _navState = new NavigationState();
@@ -44,31 +48,105 @@ namespace WinFormsApp3
             _downloadManager.OnItemUpdated += UpdateDownloadInUi;
 
             SetupMaterialSkin();
-            InitializeCustomUI();
+
+            InitializeIcons();
             InitializeTabs();
+            InitializeCustomUI();
+            InitializeLogo(); // Logo Setup am Ende
         }
 
         // =========================================================================
-        // INITIALISIERUNG & UI SETUP
+        // HELPER KLASSE: Stabilisiertes Label
         // =========================================================================
+        private class StableLabel : Label
+        {
+            public StableLabel()
+            {
+                this.AutoSize = false;
+                this.UseMnemonic = false;
+                this.TextAlign = ContentAlignment.MiddleLeft;
+            }
+
+            protected override void OnFontChanged(EventArgs e)
+            {
+                base.OnFontChanged(e);
+                if (this.Font != null && !this.Font.Bold && this.Text != "/")
+                {
+                    this.Font = new Font("Segoe UI", 11f, FontStyle.Bold);
+                }
+            }
+        }
+
+        private void SetupMaterialSkin()
+        {
+            var materialSkinManager = MaterialSkinManager.Instance;
+            materialSkinManager.AddFormToManage(this);
+            materialSkinManager.Theme = MaterialSkinManager.Themes.DARK;
+
+            materialSkinManager.ColorScheme = new MaterialColorScheme(
+                MaterialPrimary.BlueGrey800,
+                MaterialPrimary.BlueGrey900,
+                MaterialPrimary.BlueGrey500,
+                MaterialAccent.Orange400,
+                MaterialTextShade.WHITE
+            );
+        }
+
+        // =========================================================================
+        // NEU: LOGO RECHTS IN DER ACTIONBAR
+        // =========================================================================
+        private void InitializeLogo()
+        {
+            // 1. Panel suchen (es liegt jetzt in tabFiles)
+            Control actionPanel = null;
+            if (_tabFiles.Controls.ContainsKey("panelActionbar"))
+                actionPanel = _tabFiles.Controls["panelActionbar"];
+            else if (Controls.ContainsKey("panelActionbar"))
+                actionPanel = Controls["panelActionbar"];
+
+            if (actionPanel == null) return;
+
+            _appIcon = new PictureBox();
+            try { _appIcon.Image = Properties.Resources.app_logo; }
+            catch { _appIcon.Image = Properties.Resources.icon_repo; }
+
+            _appIcon.SizeMode = PictureBoxSizeMode.Zoom;
+
+            // TRICK: Da das Parent jetzt das Panel ist, funktioniert Transparent!
+            _appIcon.BackColor = Color.Transparent;
+
+            _appIcon.Size = new Size(40, 40);
+
+            // Position: Ganz rechts im Panel
+            int x = actionPanel.Width - _appIcon.Width - 10;
+            int y = (actionPanel.Height - _appIcon.Height) / 2;
+
+            _appIcon.Location = new Point(x, y);
+            _appIcon.Anchor = AnchorStyles.Top | AnchorStyles.Right; // Klebt rechts fest
+
+            // Wichtig: Zum Panel hinzufügen, nicht zur Form!
+            actionPanel.Controls.Add(_appIcon);
+            _appIcon.BringToFront();
+
+            // Titel ohne Leerzeichen, da Logo jetzt rechts ist
+            this.Text = "BBS-ME File Explorer";
+        }
+
+        private void InitializeIcons()
+        {
+            _repoIcons = new ImageList();
+            _repoIcons.ImageSize = new Size(24, 24);
+            _repoIcons.ColorDepth = ColorDepth.Depth32Bit;
+            _repoIcons.Images.Add("dir", Properties.Resources.icon_folder);
+            _repoIcons.Images.Add("file", Properties.Resources.icon_file);
+            _repoIcons.Images.Add("repo", Properties.Resources.icon_repo);
+            _repoIcons.Images.Add("back", Properties.Resources.icon_back);
+        }
 
         private void InitializeTabs()
         {
-            // 1. Tab Selector
-            _tabSelector = new MaterialTabSelector();
-            _tabSelector.BaseTabControl = _tabControl;
-            _tabSelector.Depth = 0;
-            // Fettgedruckte Schrift für bessere Lesbarkeit
-            _tabSelector.Font = new Font("Roboto", 14F, FontStyle.Bold, GraphicsUnit.Pixel);
-            _tabSelector.Location = new Point(0, 64);
-            _tabSelector.MouseState = MaterialDrawHelper.MaterialMouseState.HOVER;
-            _tabSelector.Name = "tabSelector1";
-            _tabSelector.Size = new Size(this.ClientSize.Width, 48);
-            _tabSelector.TabIndex = 99;
-            _tabSelector.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-            this.Controls.Add(_tabSelector);
+            Color darkBackground = Color.FromArgb(50, 50, 50);
 
-            // 2. Tab Control
             _tabControl = new MaterialTabControl();
             _tabControl.Depth = 0;
             _tabControl.Location = new Point(0, 112);
@@ -79,24 +157,33 @@ namespace WinFormsApp3
             _tabControl.TabIndex = 100;
             _tabControl.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
 
-            // 3. Tab Seiten (System.Windows.Forms.TabPage)
-            Color darkBackground = Color.FromArgb(50, 50, 50);
-
             _tabFiles = new System.Windows.Forms.TabPage();
             _tabFiles.Text = "Dateien";
             _tabFiles.BackColor = darkBackground;
 
             _tabDownloads = new System.Windows.Forms.TabPage();
-            _tabDownloads.Text = "Downloads";
+            _tabDownloads.Text = "Transfers";
             _tabDownloads.BackColor = darkBackground;
 
             _tabControl.Controls.Add(_tabFiles);
             _tabControl.Controls.Add(_tabDownloads);
 
-            _tabSelector.BaseTabControl = _tabControl;
             this.Controls.Add(_tabControl);
 
-            // 4. Content Verschieben
+            _tabSelector = new MaterialTabSelector();
+            _tabSelector.BaseTabControl = _tabControl;
+            _tabSelector.Depth = 0;
+            _tabSelector.Font = new Font("Segoe UI", 12F, FontStyle.Bold, GraphicsUnit.Point);
+            _tabSelector.Location = new Point(0, 64);
+            _tabSelector.MouseState = MaterialDrawHelper.MaterialMouseState.HOVER;
+            _tabSelector.Name = "tabSelector1";
+            _tabSelector.Size = new Size(this.ClientSize.Width, 48);
+            _tabSelector.TabIndex = 99;
+            _tabSelector.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            _tabSelector.CharacterCasing = MaterialTabSelector.CustomCharacterCasing.Normal;
+
+            this.Controls.Add(_tabSelector);
+
             if (lstRepos != null && !lstRepos.IsDisposed)
             {
                 if (this.Controls.Contains(lstRepos)) this.Controls.Remove(lstRepos);
@@ -104,6 +191,7 @@ namespace WinFormsApp3
                 lstRepos.Dock = DockStyle.Fill;
                 lstRepos.Visible = true;
                 lstRepos.BackColor = darkBackground;
+                lstRepos.SmallImageList = _repoIcons;
             }
 
             if (Controls.ContainsKey("panelActionbar"))
@@ -112,10 +200,11 @@ namespace WinFormsApp3
                 this.Controls.Remove(pnl);
                 pnl.Parent = _tabFiles;
                 pnl.Dock = DockStyle.Top;
+                pnl.Height = 60;
                 lstRepos.BringToFront();
+                InitializeBreadcrumbs(pnl);
             }
 
-            // 5. Download Liste bauen - GENAU WIE LSTREPOS
             _lstDownloads = new MaterialListView();
             _lstDownloads.Parent = _tabDownloads;
             _lstDownloads.Dock = DockStyle.Fill;
@@ -127,82 +216,263 @@ namespace WinFormsApp3
             _lstDownloads.View = View.Details;
             _lstDownloads.BackColor = darkBackground;
 
-            // Wir nutzen UiHelper.SetupListView für Icons und Font -> Gleicher Look!
+            _lstDownloads.Columns.Clear();
+            _lstDownloads.Columns.Add("Datei / Ordner", 400);
+            _lstDownloads.Columns.Add("Status", 200);
+            _lstDownloads.Columns.Add("Fortschritt", 100);
+            _lstDownloads.Columns.Add("Startzeit", 120);
+
             UiHelper.SetupListView(_lstDownloads);
 
-            // Aber wir brauchen andere Spalten als die Repo-Liste:
-            _lstDownloads.Columns.Clear();
-            _lstDownloads.Columns.Add("Datei / Ordner", 300); // Index 0
-            _lstDownloads.Columns.Add("Status", 250);         // Index 1 (wird breit gezogen)
-            _lstDownloads.Columns.Add("Fortschritt", 120);    // Index 2
-            _lstDownloads.Columns.Add("Startzeit", 100);      // Index 3
+            ImageList downloadIcons = new ImageList();
+            downloadIcons.ImageSize = new Size(24, 24);
+            downloadIcons.ColorDepth = ColorDepth.Depth32Bit;
+            downloadIcons.Images.Add("upload", Properties.Resources.icon_upload);
+            downloadIcons.Images.Add("download", Properties.Resources.icon_download);
+            _lstDownloads.SmallImageList = downloadIcons;
 
-            // Events: Gleiche Taktik wie bei lstRepos für Resize und Layout
-            _lstDownloads.SizeChanged += (s, e) => ResizeDownloadListColumns();
+            _lstDownloads.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(_lstDownloads);
             _lstDownloads.ColumnWidthChanging += (s, e) => { e.Cancel = true; e.NewWidth = _lstDownloads.Columns[e.ColumnIndex].Width; };
         }
 
-        // Die "Taktik" von UiHelper, aber angepasst für 4 Spalten (Downloads)
         private void ResizeDownloadListColumns()
         {
             if (_lstDownloads.Columns.Count < 4 || _lstDownloads.ClientSize.Width == 0) return;
-
-            // Spalten 0, 2 und 3 haben feste Breiten. Spalte 1 (Status) soll den Rest füllen.
             int fixedWidth = _lstDownloads.Columns[0].Width + _lstDownloads.Columns[2].Width + _lstDownloads.Columns[3].Width;
+            int availableWidth = _lstDownloads.ClientSize.Width - fixedWidth - 20;
+            if (availableWidth > 50) _lstDownloads.Columns[1].Width = availableWidth;
+        }
 
-            // Scrollbar checken wie im UiHelper
-            bool hasScroll = false;
-            try
+        private void InitializeBreadcrumbs(Control parentPanel)
+        {
+            _flowPath = new FlowLayoutPanel();
+            _flowPath.AutoSize = true;
+            _flowPath.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            _flowPath.BackColor = Color.Transparent;
+            _flowPath.FlowDirection = FlowDirection.LeftToRight;
+            _flowPath.WrapContents = false;
+            _flowPath.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            parentPanel.Controls.Add(_flowPath);
+            _flowPath.Location = new Point(260, 15);
+        }
+
+        private void UpdateBreadcrumbs(string searchContext = null)
+        {
+            if (_flowPath == null) return;
+
+            _flowPath.SuspendLayout();
+            _flowPath.Controls.Clear();
+
+            Color colorLink = Color.White;
+            Color colorSep = Color.Gray;
+
+            PictureBox btnHomeIcon = CreateHomeIcon();
+            _flowPath.Controls.Add(btnHomeIcon);
+
+            Label lblHomeText = CreateBreadcrumbLabel("Bibliotheken", null, _crumbFontBold, colorLink);
+            _flowPath.Controls.Add(lblHomeText);
+
+            if (searchContext != null)
             {
-                if (_lstDownloads.Items.Count > 0)
+                AddBreadcrumbSeparator(_crumbFontBold, colorSep);
+                Label lblSearch = CreateBreadcrumbLabel($"Suche: '{searchContext}'", null, _crumbFontBold, Color.Orange);
+                _flowPath.Controls.Add(lblSearch);
+            }
+            else if (!_navState.IsInRoot)
+            {
+                AddBreadcrumbSeparator(_crumbFontBold, colorSep);
+                Label lblRepo = CreateBreadcrumbLabel(_navState.CurrentRepoName, "/", _crumbFontBold, colorLink);
+                _flowPath.Controls.Add(lblRepo);
+
+                string path = _navState.CurrentPath;
+                if (path != "/")
                 {
-                    var rect = _lstDownloads.GetItemRect(0);
-                    if ((_lstDownloads.Items.Count * rect.Height) > _lstDownloads.ClientSize.Height) hasScroll = true;
+                    string[] parts = path.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries);
+                    string currentBuildPath = "";
+                    foreach (var part in parts)
+                    {
+                        currentBuildPath += "/" + part;
+                        AddBreadcrumbSeparator(_crumbFontBold, colorSep);
+                        Label lblPart = CreateBreadcrumbLabel(part, currentBuildPath, _crumbFontBold, colorLink);
+                        _flowPath.Controls.Add(lblPart);
+                    }
                 }
             }
-            catch { }
 
-            int buffer = hasScroll ? SystemInformation.VerticalScrollBarWidth + 4 : 0;
-            int availableWidth = _lstDownloads.ClientSize.Width - fixedWidth - buffer;
+            _flowPath.ResumeLayout(true);
+        }
 
-            if (availableWidth > 50) _lstDownloads.Columns[1].Width = availableWidth;
+        private PictureBox CreateHomeIcon()
+        {
+            PictureBox pb = new PictureBox();
+            try { pb.Image = Properties.Resources.icon_home; } catch { }
+            pb.SizeMode = PictureBoxSizeMode.Zoom;
+            pb.Size = new Size(24, 30);
+            pb.Cursor = Cursors.Hand;
+            pb.Margin = new Padding(0, 0, 5, 0);
+            pb.Click += async (s, e) => { _navState.ResetToRoot(); await LadeInhalt(); };
+            return pb;
+        }
+
+        private Label CreateBreadcrumbLabel(string text, string navigationPath, Font font, Color color)
+        {
+            StableLabel lbl = new StableLabel();
+            lbl.Text = text;
+            lbl.ForeColor = color;
+            lbl.Font = font;
+            lbl.Height = 30;
+            lbl.Margin = new Padding(0, 0, 0, 0);
+
+            Size preferredSize = TextRenderer.MeasureText(text, font);
+            lbl.Width = preferredSize.Width + 5;
+
+            bool isClickable = !text.StartsWith("Suche:");
+
+            if (isClickable)
+            {
+                lbl.Cursor = Cursors.Hand;
+                lbl.MouseEnter += (s, e) => lbl.ForeColor = Color.Orange;
+                lbl.MouseLeave += (s, e) => lbl.ForeColor = color;
+                lbl.Click += async (s, e) =>
+                {
+                    if (navigationPath == null) { _navState.ResetToRoot(); await LadeInhalt(); }
+                    else if (navigationPath == "/") { _navState.EnterRepo(_navState.CurrentRepoId, _navState.CurrentRepoName); await LadeInhalt(); }
+                    else { _navState.EnterRepo(_navState.CurrentRepoId, _navState.CurrentRepoName); _navState.EnterFolder(navigationPath.TrimStart('/')); await LadeInhalt(); }
+                };
+            }
+            return lbl;
+        }
+
+        private void AddBreadcrumbSeparator(Font font, Color color)
+        {
+            StableLabel sep = new StableLabel();
+            sep.Text = "/";
+            sep.ForeColor = color;
+            sep.Font = font;
+            sep.Height = 30;
+            sep.Width = 15;
+            sep.TextAlign = ContentAlignment.MiddleCenter;
+            sep.Margin = new Padding(0, 0, 0, 0);
+            _flowPath.Controls.Add(sep);
         }
 
         private void InitializeCustomUI()
         {
             ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click);
-            try
-            {
-                ctxMenu.Items[0].Image = MenuBuilder.ResizeIcon(Properties.Resources.icons8_dateidownload_40, 16, 16);
-                ctxMenu.Items[2].Image = MenuBuilder.ResizeIcon(Properties.Resources.icons8_datei_löschen_40, 16, 16);
-            }
-            catch { }
+            ToolStripMenuItem itemJump = new ToolStripMenuItem("Im Ordner anzeigen");
+            itemJump.Click += CtxJumpTo_Click;
+            itemJump.Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_jump, 16, 16);
+            ctxMenu.Items.Insert(0, new ToolStripSeparator());
+            ctxMenu.Items.Insert(0, itemJump);
+
+            if (ctxMenu.Items.Count > 2) ctxMenu.Items[2].Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_download, 16, 16);
+            if (ctxMenu.Items.Count > 4) ctxMenu.Items[4].Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_löschen, 16, 16);
 
             lstRepos.ContextMenuStrip = ctxMenu;
-            UiHelper.SetupListView(lstRepos);
-
+            UiHelper.SetupListView(lstRepos, _repoIcons);
+            lstRepos.Columns.Clear();
+            lstRepos.Columns.Add("Name", 400);
+            lstRepos.Columns.Add("Größe", 90);
+            lstRepos.Columns.Add("Geändert", 160);
+            lstRepos.Columns.Add("Typ / Pfad", 150);
             lstRepos.DoubleClick += lstRepos_DoubleClick;
             lstRepos.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(lstRepos);
             lstRepos.ColumnWidthChanging += (s, e) => { e.Cancel = true; e.NewWidth = lstRepos.Columns[e.ColumnIndex].Width; };
             lstRepos.AllowDrop = true;
+
             lstRepos.DragEnter += LstRepos_DragEnter;
             lstRepos.DragDrop += LstRepos_DragDrop;
 
-            materialButton2.Click += BtnNew_Click;
-            materialButton3.Click += BtnDelete_Click;
+            ReplaceMaterialButtonsWithStandard();
+
+            _lstDownloads.DoubleClick += _lstDownloads_DoubleClick;
 
             try { if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].BackColor = Color.FromArgb(45, 45, 48); } catch { }
         }
 
-        private void SetupMaterialSkin()
+        private void ReplaceMaterialButtonsWithStandard()
         {
-            var materialSkinManager = MaterialSkinManager.Instance;
-            materialSkinManager.AddFormToManage(this);
-            materialSkinManager.Theme = MaterialSkinManager.Themes.DARK;
-            materialSkinManager.ColorScheme = new MaterialColorScheme(
-                MaterialPrimary.Orange500, MaterialPrimary.Orange700, MaterialPrimary.Orange200,
-                MaterialAccent.DeepOrange400, MaterialTextShade.WHITE
-            );
+            Control actionPanel = null;
+            if (Controls.ContainsKey("panelActionbar")) actionPanel = Controls["panelActionbar"];
+            else if (_tabFiles.Controls.ContainsKey("panelActionbar")) actionPanel = _tabFiles.Controls["panelActionbar"];
+
+            if (actionPanel == null) return;
+
+            var toRemove = new List<Control>();
+            foreach (Control c in actionPanel.Controls)
+            {
+                if (c is MaterialButton || c.Name.StartsWith("materialButton") || c.Name == "btnLogout")
+                    toRemove.Add(c);
+            }
+            foreach (var c in toRemove) actionPanel.Controls.Remove(c);
+
+            // =========================================================
+            // LINKS
+            // =========================================================
+            int leftX = 10;
+            int btnY = 12;
+
+            System.Windows.Forms.Button btnNew = CreateFlatButton("NEU", Properties.Resources.icon_new);
+            btnNew.Location = new Point(leftX, btnY);
+            btnNew.Click += BtnNew_Click;
+            actionPanel.Controls.Add(btnNew);
+
+            System.Windows.Forms.Button btnDel = CreateFlatButton("LÖSCHEN", Properties.Resources.icon_delete);
+            btnDel.Location = new Point(btnNew.Right + 10, btnY);
+            btnDel.Click += BtnDelete_Click;
+            actionPanel.Controls.Add(btnDel);
+
+            // =========================================================
+            // RECHTS (Angepasst für Logo Platz)
+            // =========================================================
+
+            // Logo ist ca. 40-50px breit. Wir schieben die Buttons um 60px nach links vom Rand.
+            int rightEdge = actionPanel.Width - 60;
+
+            System.Windows.Forms.Button btnOut = CreateFlatButton("AUSLOGGEN", Properties.Resources.icon_logout);
+            btnOut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnOut.Location = new Point(rightEdge - btnOut.Width, btnY);
+            btnOut.Click += btnLogout_Click;
+            actionPanel.Controls.Add(btnOut);
+
+            System.Windows.Forms.Button btnSearch = CreateFlatButton("SUCHEN", Properties.Resources.icon_search);
+            btnSearch.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnSearch.Location = new Point(btnOut.Left - btnSearch.Width - 10, btnY);
+            btnSearch.Click += btnSearch_Click;
+            actionPanel.Controls.Add(btnSearch);
+        }
+
+        private System.Windows.Forms.Button CreateFlatButton(string text, Image icon)
+        {
+            System.Windows.Forms.Button btn = new System.Windows.Forms.Button();
+
+            btn.Text = " " + text;
+            btn.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
+            btn.ForeColor = Color.White;
+            btn.BackColor = Color.Transparent;
+
+            btn.Image = ResizeImage(icon, 24, 24);
+            btn.ImageAlign = ContentAlignment.MiddleLeft;
+            btn.TextAlign = ContentAlignment.MiddleLeft;
+            btn.TextImageRelation = TextImageRelation.ImageBeforeText;
+
+            btn.FlatStyle = FlatStyle.Flat;
+            btn.FlatAppearance.BorderSize = 0;
+            btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(70, 70, 70);
+            btn.FlatAppearance.MouseDownBackColor = Color.FromArgb(40, 40, 40);
+
+            btn.Height = 38;
+            btn.Cursor = Cursors.Hand;
+
+            Size textSize = TextRenderer.MeasureText(btn.Text, btn.Font);
+            btn.Width = 24 + 10 + textSize.Width + 10;
+
+            return btn;
+        }
+
+        private Image ResizeImage(Image img, int w, int h)
+        {
+            return new Bitmap(img, new Size(w, h));
         }
 
         private async void Form1_Load(object sender, EventArgs e)
@@ -211,9 +481,6 @@ namespace WinFormsApp3
             await LadeInhalt();
         }
 
-        // =========================================================================
-        // RESIZE FIX (WICHTIG: Auch für die Download-Liste aufrufen!)
-        // =========================================================================
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
@@ -221,62 +488,67 @@ namespace WinFormsApp3
             if (_lstDownloads != null) ResizeDownloadListColumns();
         }
 
-        // =========================================================================
-        // DOWNLOAD EVENT HANDLER
-        // =========================================================================
+        private async void CtxJumpTo_Click(object sender, EventArgs e)
+        {
+            if (lstRepos.SelectedItems.Count == 0) return;
+            var tag = lstRepos.SelectedItems[0].Tag;
+            if (tag is Tuple<string, SeafileEntry> searchResult)
+            {
+                string repoId = searchResult.Item1;
+                SeafileEntry entry = searchResult.Item2;
+                string targetPath = entry.parent_dir;
+                if (string.IsNullOrEmpty(targetPath)) targetPath = "/";
+                _navState.EnterRepo(repoId, "...");
+                if (targetPath == "/") _navState.ResetToRoot();
+                else { _navState.EnterRepo(repoId, "Bibliothek"); foreach (var part in targetPath.Split(new[] { '/' }, StringSplitOptions.RemoveEmptyEntries)) { _navState.EnterFolder(part); } }
+                if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].Enabled = true;
+                lstRepos.Visible = true;
+                await LadeInhalt();
+                foreach (ListViewItem item in lstRepos.Items) { if (item.Tag is SeafileEntry dirEntry && dirEntry.name == entry.name) { item.Selected = true; item.EnsureVisible(); break; } }
+            }
+            else { UiHelper.ShowInfoDialog("Info", "Du bist bereits in diesem Verzeichnis."); }
+        }
 
         private void AddDownloadToUi(DownloadItem item)
         {
             if (this.InvokeRequired) { this.Invoke(new Action<DownloadItem>(AddDownloadToUi), item); return; }
 
-            var lvi = new ListViewItem(item.FileName);
+            string cleanName = item.FileName.Replace("⬇", "").Replace("⬆", "").Trim();
+            var lvi = new ListViewItem(cleanName);
             lvi.SubItems.Add(item.Status);
             lvi.SubItems.Add(item.Progress + "%");
             lvi.SubItems.Add(item.StartTime.ToShortTimeString());
-            lvi.ImageKey = item.Type.Contains("Ordner") ? "dir" : "file"; // Icons aus SetupListView nutzen!
-            item.Tag = lvi;
-            _lstDownloads.Items.Add(lvi);
 
-            ResizeDownloadListColumns(); // Sofort Layout fixen
+            if (item.Type == "Upload") lvi.ImageKey = "upload";
+            else lvi.ImageKey = "download";
+
+            item.Tag = lvi;
+            lvi.Tag = item;
+            _lstDownloads.Items.Add(lvi);
+            ResizeDownloadListColumns();
         }
 
         private void UpdateDownloadInUi(DownloadItem item)
         {
             if (this.InvokeRequired) { this.Invoke(new Action<DownloadItem>(UpdateDownloadInUi), item); return; }
-
             if (item.Tag is ListViewItem lvi)
             {
                 lvi.SubItems[1].Text = item.Status;
                 lvi.SubItems[2].Text = item.Progress + "%";
-
-                if (item.Status == "Fertig")
-                {
-                    lvi.ForeColor = Color.LightGreen;
-                }
-                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen")
-                {
-                    lvi.ForeColor = Color.Salmon;
-                }
+                if (item.Status == "Fertig") lvi.ForeColor = Color.LightGreen;
+                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen") lvi.ForeColor = Color.Salmon;
             }
         }
-
-        // =========================================================================
-        // DATEN LADEN
-        // =========================================================================
 
         private async Task LadeInhalt()
         {
             try
             {
+                UpdateBreadcrumbs(); // Reset normal
                 if (_seafileClient == null) _seafileClient = new SeafileClient(_authToken);
-
-                lstRepos.Items.Clear();
-                lstRepos.Groups.Clear();
-                lstRepos.ShowGroups = true;
-
+                lstRepos.Items.Clear(); lstRepos.Groups.Clear(); lstRepos.ShowGroups = true;
                 if (_navState.IsInRoot) await LoadLibraries();
                 else await LoadDirectory(_navState.CurrentRepoId, _navState.CurrentPath);
-
                 UiHelper.UpdateColumnWidths(lstRepos);
             }
             catch (Exception ex) { UiHelper.ShowErrorDialog("Ladefehler", ex.Message); }
@@ -284,57 +556,57 @@ namespace WinFormsApp3
 
         private async Task LoadLibraries()
         {
-            ListViewGroup grpMine = new ListViewGroup("Meine Bibliotheken", HorizontalAlignment.Left);
-            ListViewGroup grpShared = new ListViewGroup("Für mich freigegeben", HorizontalAlignment.Left);
-
+            ListViewGroup grpMine = new ListViewGroup("   MEINE BIBLIOTHEKEN", HorizontalAlignment.Left);
+            ListViewGroup grpShared = new ListViewGroup("   FÜR MICH FREIGEGEBEN", HorizontalAlignment.Left);
             lstRepos.Groups.Add(grpMine);
             lstRepos.Groups.Add(grpShared);
 
             var repos = await _seafileClient.GetLibrariesAsync();
-
             foreach (var repo in repos)
             {
-                var item = new ListViewItem("📚");
-                item.SubItems.Add(repo.name);
-                item.SubItems.Add((repo.size / 1024 / 1024) + " MB");
+                var item = new ListViewItem(repo.name, "repo");
+                item.SubItems.Add(UiHelper.FormatByteSize(repo.size));
                 item.SubItems.Add(FormatDate(repo.mtime));
+
                 string ownerDisplay = repo.type == "grepo" ? "Gruppe" : (repo.owner ?? "-");
                 item.SubItems.Add(ownerDisplay);
                 item.Tag = repo;
 
                 if (repo.type == "repo") item.Group = grpMine;
-                else if (repo.type == "srepo") { item.Group = grpShared; item.SubItems[4].Text = repo.owner; }
+                else if (repo.type == "srepo") item.Group = grpShared;
                 else if (repo.type == "grepo")
                 {
-                    string groupName = repo.owner;
+                    string groupName = "   GRUPPE: " + repo.owner.ToUpper();
                     ListViewGroup targetGroup = null;
-                    foreach (ListViewGroup existingGroup in lstRepos.Groups) { if (existingGroup.Header == groupName) { targetGroup = existingGroup; break; } }
-                    if (targetGroup == null) { targetGroup = new ListViewGroup(groupName, HorizontalAlignment.Left); lstRepos.Groups.Add(targetGroup); }
+                    foreach (ListViewGroup existingGroup in lstRepos.Groups)
+                    {
+                        if (existingGroup.Header == groupName) { targetGroup = existingGroup; break; }
+                    }
+                    if (targetGroup == null)
+                    {
+                        targetGroup = new ListViewGroup(groupName, HorizontalAlignment.Left);
+                        lstRepos.Groups.Add(targetGroup);
+                    }
                     item.Group = targetGroup;
                 }
                 else item.Group = grpShared;
 
                 lstRepos.Items.Add(item);
             }
-            lblStatus.Text = $"Bereit. {repos.Count} Bibliotheken gefunden.";
         }
 
         private async Task LoadDirectory(string repoId, string path)
         {
             lstRepos.ShowGroups = false;
             var entries = await _seafileClient.GetDirectoryEntriesAsync(repoId, path);
-
-            var backItem = new ListViewItem("🔙");
-            backItem.SubItems.Add(".. [Zurück]");
-            backItem.SubItems.Add(""); backItem.SubItems.Add(""); backItem.SubItems.Add("");
+            var backItem = new ListViewItem(".. [Zurück]", "back");
             backItem.Tag = new SeafileEntry { type = "back" };
             lstRepos.Items.Add(backItem);
 
             foreach (var entry in entries)
             {
-                string icon = entry.type == "dir" ? "dir" : "file"; // Icons aus ImageList nutzen
-                var item = new ListViewItem(icon); // Key statt Emoji
-                item.SubItems.Add(entry.name);
+                string iconKey = entry.type == "dir" ? "dir" : "file";
+                var item = new ListViewItem(entry.name, iconKey);
                 item.SubItems.Add(entry.type == "dir" ? "-" : (entry.size / 1024) + " KB");
                 item.SubItems.Add(FormatDate(entry.mtime));
                 item.SubItems.Add(entry.type);
@@ -344,47 +616,68 @@ namespace WinFormsApp3
             lblStatus.Text = $"{_navState.CurrentRepoName}: {_navState.CurrentPath}";
         }
 
-        // =========================================================================
-        // AKTIONEN
-        // =========================================================================
-
         private async void CtxDownload_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count == 0) return;
-            var tag = lstRepos.SelectedItems[0].Tag;
 
-            try
+            if (lstRepos.SelectedItems.Count > 1)
             {
-                bool started = false;
-
-                if (tag is SeafileRepo repo)
+                var itemsToDownload = new List<object>();
+                foreach (ListViewItem lvi in lstRepos.SelectedItems)
                 {
-                    _ = _downloadManager.DownloadRepoAsync(repo);
-                    started = true;
-                }
-                else
-                {
-                    SeafileEntry entryToDownload = null;
-                    string repoId = _navState.CurrentRepoId;
-                    string navPath = _navState.CurrentPath;
-
-                    if (tag is Tuple<string, SeafileEntry> tuple) { repoId = tuple.Item1; entryToDownload = tuple.Item2; navPath = "/"; }
-                    else if (tag is SeafileEntry entry) { entryToDownload = entry; }
-
-                    if (entryToDownload != null)
-                    {
-                        _ = _downloadManager.DownloadEntryAsync(entryToDownload, repoId, navPath);
-                        started = true;
-                    }
+                    if (lvi.Tag is SeafileEntry se && se.type == "back") continue;
+                    itemsToDownload.Add(lvi.Tag);
                 }
 
-                if (started)
+                if (itemsToDownload.Count > 0)
                 {
-                    MaterialSnackBar snack = new MaterialSnackBar("Download gestartet! Siehe Tab 'Downloads'", "OK", true);
-                    snack.Show(this);
+                    string zipName = $"Download_{DateTime.Now:yyyyMMdd_HHmmss}.zip";
+                    _ = _downloadManager.DownloadMultipleFilesAsZipAsync(itemsToDownload, _navState.CurrentRepoId, zipName);
                 }
             }
-            catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); }
+            else
+            {
+                var tag = lstRepos.SelectedItems[0].Tag;
+                try
+                {
+                    bool started = false;
+                    if (tag is SeafileRepo repo)
+                    {
+                        _ = _downloadManager.DownloadRepoAsync(repo);
+                        started = true;
+                    }
+                    else
+                    {
+                        SeafileEntry entryToDownload = null;
+                        string repoId = _navState.CurrentRepoId;
+                        string navPath = _navState.CurrentPath;
+
+                        if (tag is Tuple<string, SeafileEntry> tuple)
+                        {
+                            repoId = tuple.Item1;
+                            entryToDownload = tuple.Item2;
+                            navPath = entryToDownload.parent_dir ?? "/";
+                        }
+                        else if (tag is SeafileEntry entry)
+                        {
+                            entryToDownload = entry;
+                        }
+
+                        if (entryToDownload != null && entryToDownload.type != "back")
+                        {
+                            _ = _downloadManager.DownloadEntryAsync(entryToDownload, repoId, navPath);
+                            started = true;
+                        }
+                    }
+
+                    if (started)
+                    {
+                        MaterialSnackBar snack = new MaterialSnackBar("Download gestartet!", "OK", true);
+                        snack.Show(this);
+                    }
+                }
+                catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); }
+            }
         }
 
         private async void BtnNew_Click(object sender, EventArgs e)
@@ -394,21 +687,12 @@ namespace WinFormsApp3
                 if (_navState.IsInRoot)
                 {
                     string libName = UiHelper.ShowInputDialog("Neue Bibliothek", "Name:");
-                    if (!string.IsNullOrWhiteSpace(libName))
-                    {
-                        bool success = await _seafileClient.CreateLibraryAsync(libName);
-                        if (success) { await LadeInhalt(); UiHelper.ShowSuccessDialog("Erfolg", "Bibliothek erstellt."); }
-                    }
+                    if (!string.IsNullOrWhiteSpace(libName)) { bool success = await _seafileClient.CreateLibraryAsync(libName); if (success) { await LadeInhalt(); UiHelper.ShowSuccessDialog("Erfolg", "Bibliothek erstellt."); } }
                 }
                 else
                 {
                     string folderName = UiHelper.ShowInputDialog("Neuer Ordner", "Name:");
-                    if (!string.IsNullOrWhiteSpace(folderName))
-                    {
-                        string newPath = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + folderName : _navState.CurrentPath + "/" + folderName;
-                        bool success = await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newPath);
-                        if (success) await LadeInhalt();
-                    }
+                    if (!string.IsNullOrWhiteSpace(folderName)) { string newPath = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + folderName : _navState.CurrentPath + "/" + folderName; bool success = await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newPath); if (success) await LadeInhalt(); }
                 }
             }
             catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); }
@@ -417,157 +701,126 @@ namespace WinFormsApp3
         private async void BtnDelete_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count == 0) return;
-            var tag = lstRepos.SelectedItems[0].Tag;
 
-            try
+            int count = lstRepos.SelectedItems.Count;
+            string title = "LÖSCHEN BESTÄTIGEN";
+            string message = "";
+
+            if (count == 1)
             {
-                if (tag is SeafileEntry entry && entry.type != "back")
+                var tag = lstRepos.SelectedItems[0].Tag;
+                if (tag is SeafileEntry entry)
                 {
-                    if (UiHelper.ShowDangerConfirmation("Datei löschen", $"Wirklich '{entry.name}' löschen?"))
-                    {
-                        string path = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + entry.name : _navState.CurrentPath + "/" + entry.name;
-                        bool success = await _seafileClient.DeleteEntryAsync(_navState.CurrentRepoId, path, entry.type == "dir");
-                        if (success) { await LadeInhalt(); UiHelper.ShowInfoDialog("Gelöscht", "Eintrag wurde entfernt."); }
-                    }
+                    if (entry.type == "back") return;
+                    message = $"Möchten Sie '{entry.name}' wirklich löschen?";
                 }
                 else if (tag is SeafileRepo repo)
                 {
-                    if (UiHelper.ShowDangerConfirmation("BIBLIOTHEK LÖSCHEN", $"ACHTUNG: '{repo.name}' wirklich unwiderruflich löschen?"))
-                    {
-                        bool success = await _seafileClient.DeleteLibraryAsync(repo.id);
-                        if (success) { await LadeInhalt(); UiHelper.ShowInfoDialog("Gelöscht", "Bibliothek entfernt."); }
-                    }
+                    message = $"Möchten Sie die Bibliothek '{repo.name}' wirklich löschen?";
                 }
             }
-            catch (Exception ex) { UiHelper.ShowErrorDialog("Löschen fehlgeschlagen", ex.Message); }
+            else
+            {
+                message = $"Möchten Sie wirklich {count} Elemente unwiderruflich löschen?";
+            }
+
+            if (!UiHelper.ShowDangerConfirmation(title, message)) return;
+
+            int successCount = 0;
+            try
+            {
+                foreach (ListViewItem item in lstRepos.SelectedItems)
+                {
+                    var tag = item.Tag;
+                    bool success = false;
+
+                    if (tag is SeafileEntry entry && entry.type != "back")
+                    {
+                        bool isDir = entry.type == "dir";
+                        string path = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + entry.name : _navState.CurrentPath + "/" + entry.name;
+                        success = await _seafileClient.DeleteEntryAsync(_navState.CurrentRepoId, path, isDir);
+                    }
+                    else if (tag is SeafileRepo repo)
+                    {
+                        success = await _seafileClient.DeleteLibraryAsync(repo.id);
+                    }
+
+                    if (success) successCount++;
+                }
+
+                if (successCount > 0)
+                {
+                    await LadeInhalt();
+                    MaterialSnackBar snack = new MaterialSnackBar($"{successCount} Elemente gelöscht.", "OK", true);
+                    snack.Show(this);
+                }
+            }
+            catch (Exception ex) { UiHelper.ShowErrorDialog("Löschen teilweise fehlgeschlagen", ex.Message); }
         }
 
-        private void btnLogout_Click(object sender, EventArgs e)
-        {
-            if (UiHelper.ShowConfirmationDialog("Abmelden", "Möchtest du dich wirklich abmelden?"))
-            {
-                new DBHelper().DeleteToken();
-                new AuthManager(null).ClearBrowserCacheOnDisk();
-                Application.Restart();
-            }
-        }
+        private void btnLogout_Click(object sender, EventArgs e) { if (UiHelper.ShowConfirmationDialog("Abmelden", "Möchtest du dich wirklich abmelden?")) { new DBHelper().DeleteToken(); new AuthManager(null).ClearBrowserCacheOnDisk(); Application.Restart(); } }
 
         private async void btnSearch_Click(object sender, EventArgs e)
         {
             string searchTerm = UiHelper.ShowInputDialog("Globale Suche", "Suchbegriff:");
-            if (string.IsNullOrWhiteSpace(searchTerm))
-            {
-                await LadeInhalt();
-                return;
-            }
-
-            _tabControl.SelectedIndex = 0;
-            if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].Enabled = false;
+            if (string.IsNullOrWhiteSpace(searchTerm)) { await LadeInhalt(); return; }
 
             lstRepos.Visible = false;
             lstRepos.Items.Clear();
             lstRepos.Groups.Clear();
-            lstRepos.ShowGroups = true;
-
-            string termLower = searchTerm.ToLower();
-            lblStatus.Text = "Suche läuft... (Kann dauern)";
-            Application.DoEvents();
 
             try
             {
+                lblStatus.Text = "Suche läuft...";
+                UpdateBreadcrumbs("Suche: " + searchTerm);
+
                 var allRepos = await _seafileClient.GetLibrariesAsync();
-                int totalHits = 0;
-                int errorCount = 0;
 
-                using (var semaphore = new System.Threading.SemaphoreSlim(3))
+                lstRepos.BeginUpdate();
+                foreach (var repo in allRepos)
                 {
-                    var searchTasks = allRepos.Select(async repo =>
+                    var entries = await _seafileClient.GetAllFilesRecursiveAsync(repo.id);
+                    var matches = entries.Where(x => x.name.ToLower().Contains(searchTerm.ToLower())).ToList();
+
+                    if (matches.Count > 0)
                     {
-                        await semaphore.WaitAsync();
-                        try
+                        ListViewGroup grp = new ListViewGroup(repo.name, HorizontalAlignment.Left);
+                        lstRepos.Groups.Add(grp);
+
+                        foreach (var entry in matches)
                         {
-                            var entries = await _seafileClient.GetAllFilesRecursiveAsync(repo.id);
-                            return new { Repo = repo, Entries = entries };
-                        }
-                        catch { errorCount++; return null; }
-                        finally { semaphore.Release(); }
-                    });
-
-                    var results = await Task.WhenAll(searchTasks);
-                    lstRepos.BeginUpdate();
-
-                    foreach (var result in results)
-                    {
-                        if (result == null || result.Entries == null) continue;
-                        var matches = result.Entries.Where(entry => (entry.name != null && entry.name.ToLower().Contains(termLower)) || (entry.parent_dir != null && entry.parent_dir.ToLower().Contains(termLower))).ToList();
-
-                        if (matches.Count > 0)
-                        {
-                            string groupTitle = result.Repo.type == "grepo" ? result.Repo.owner : result.Repo.name;
-                            if (result.Repo.type == "srepo") groupTitle += $" (von {result.Repo.owner})";
-                            ListViewGroup repoGroup = new ListViewGroup(groupTitle, HorizontalAlignment.Left);
-                            lstRepos.Groups.Add(repoGroup);
-
-                            foreach (var entry in matches)
-                            {
-                                string folder = string.IsNullOrEmpty(entry.parent_dir) ? "/" : entry.parent_dir;
-                                if (!folder.EndsWith("/")) folder += "/";
-                                string displayName = folder + entry.name;
-                                string icon = entry.type == "dir" ? "dir" : "file";
-                                var item = new ListViewItem(icon);
-                                item.SubItems.Add(displayName);
-                                item.SubItems.Add(entry.type == "dir" ? "-" : (entry.size / 1024) + " KB");
-                                item.SubItems.Add(FormatDate(entry.mtime));
-                                item.SubItems.Add(entry.type);
-                                item.Tag = new Tuple<string, SeafileEntry>(result.Repo.id, entry);
-                                item.Group = repoGroup;
-                                lstRepos.Items.Add(item);
-                                totalHits++;
-                            }
+                            string displayPath = (entry.parent_dir ?? "/") + entry.name;
+                            var item = new ListViewItem(displayPath, entry.type == "dir" ? "dir" : "file");
+                            item.SubItems.Add(entry.type == "dir" ? "-" : UiHelper.FormatByteSize(entry.size));
+                            item.SubItems.Add(FormatDate(entry.mtime));
+                            item.SubItems.Add(entry.type);
+                            item.Tag = new Tuple<string, SeafileEntry>(repo.id, entry);
+                            item.Group = grp;
+                            lstRepos.Items.Add(item);
                         }
                     }
-                    lstRepos.EndUpdate();
                 }
-                string statusMsg = $"Gefunden: {totalHits} Treffer.";
-                if (errorCount > 0) statusMsg += $" ({errorCount} Fehler)";
-                lblStatus.Text = statusMsg;
             }
-            catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); await LadeInhalt(); }
-            finally { lstRepos.Visible = true; if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].Enabled = true; UiHelper.UpdateColumnWidths(lstRepos); }
+            catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); }
+            finally
+            {
+                lstRepos.EndUpdate();
+                lstRepos.Visible = true;
+                lstRepos.Invalidate();
+                lblStatus.Text = "Suche beendet.";
+                UiHelper.UpdateColumnWidths(lstRepos);
+                lstRepos.Invalidate();
+            }
         }
 
         private async void LstRepos_DragDrop(object sender, DragEventArgs e)
         {
-            if (_navState.IsInRoot) { UiHelper.ShowInfoDialog("Info", "Bitte öffne erst eine Bibliothek für den Upload."); return; }
+            if (_navState.IsInRoot) { UiHelper.ShowInfoDialog("Info", "Bitte öffne erst eine Bibliothek."); return; }
             string[] droppedPaths = (string[])e.Data.GetData(DataFormats.FileDrop);
             if (droppedPaths != null && droppedPaths.Length > 0)
             {
-                try
-                {
-                    foreach (string path in droppedPaths) await ProcessDropEntryRecursive(path, _navState.CurrentPath);
-                    await LadeInhalt();
-                    UiHelper.ShowSuccessDialog("Upload fertig", "Alle Dateien wurden hochgeladen.");
-                }
-                catch (Exception ex) { UiHelper.ShowErrorDialog("Upload Fehler", ex.Message); }
-            }
-        }
-
-        private async Task ProcessDropEntryRecursive(string localPath, string remoteTargetFolder)
-        {
-            FileAttributes attr = File.GetAttributes(localPath);
-            if (attr.HasFlag(FileAttributes.Directory))
-            {
-                string folderName = new DirectoryInfo(localPath).Name;
-                string newRemotePath = remoteTargetFolder.EndsWith("/") ? remoteTargetFolder + folderName : remoteTargetFolder + "/" + folderName;
-                lblStatus.Text = $"Erstelle Ordner: {folderName}";
-                await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newRemotePath);
-                foreach (string entry in Directory.GetFileSystemEntries(localPath)) await ProcessDropEntryRecursive(entry, newRemotePath);
-            }
-            else
-            {
-                string fileName = Path.GetFileName(localPath);
-                string link = await _seafileClient.GetUploadLinkAsync(_navState.CurrentRepoId, remoteTargetFolder);
-                if (!string.IsNullOrEmpty(link)) { lblStatus.Text = $"Upload: {fileName}"; await _seafileClient.UploadFileAsync(link, localPath, remoteTargetFolder, fileName); }
+                try { _ = _downloadManager.UploadFilesAsync(droppedPaths, _navState.CurrentRepoId, _navState.CurrentPath); MaterialSnackBar snack = new MaterialSnackBar("Upload gestartet!", "OK", true); snack.Show(this); }
+                catch (Exception ex) { UiHelper.ShowScrollableErrorDialog("Upload Fehler", ex.Message); }
             }
         }
 
@@ -587,5 +840,6 @@ namespace WinFormsApp3
         private void LstRepos_DragEnter(object sender, DragEventArgs e) => e.Effect = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
         protected override void OnShown(EventArgs e) { base.OnShown(e); this.Activate(); }
         private string FormatDate(long timestamp) => timestamp == 0 ? "-" : DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime().ToString("g");
+        private void _lstDownloads_DoubleClick(object sender, EventArgs e) { if (_lstDownloads.SelectedItems.Count > 0) { if (_lstDownloads.SelectedItems[0].Tag is DownloadItem item) { new FrmTransferDetail(item).ShowDialog(); } } }
     }
 }

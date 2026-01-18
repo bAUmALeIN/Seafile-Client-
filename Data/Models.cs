@@ -1,14 +1,8 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-
-using System.Collections.Generic;
 
 namespace WinFormsApp3.Data
 {
-
     public static class AppConfig
     {
         public const string ApiBaseUrl = "https://seafile.bbs-me.org/api2/";
@@ -26,14 +20,13 @@ namespace WinFormsApp3.Data
 
         public string type { get; set; } // "repo", "srepo" (freigegeben), "grepo" (Gruppe)
         public string owner { get; set; }
-
     }
 
     public class SeafileEntry
     {
         public string id { get; set; }
         public string name { get; set; }
-        public string type { get; set; } 
+        public string type { get; set; }
         public long size { get; set; }
         public long mtime { get; set; }
         public string parent_dir { get; set; }
@@ -41,16 +34,17 @@ namespace WinFormsApp3.Data
 
     public class DownloadItem
     {
-        public string Id { get; set; } = Guid.NewGuid().ToString(); // Eindeutige ID
+        public string Id { get; set; } = Guid.NewGuid().ToString();
         public string FileName { get; set; }
-        public string Type { get; set; } // "Datei", "Ordner (Zip)", "Ordner (Turbo)"
-        public long TotalSize { get; set; } // Optional
-        public string Status { get; set; } = "Wartet..."; // "Lädt...", "Fertig", "Fehler"
-        public int Progress { get; set; } = 0; // 0 bis 100
+        public string Type { get; set; } // "Upload", "Download", etc.
+        public long TotalSize { get; set; }
+        public string Status { get; set; } = "Wartet...";
+        public int Progress { get; set; } = 0;
         public DateTime StartTime { get; set; } = DateTime.Now;
 
-        // Hilfsfeld für UI-Update (damit wir wissen, welches ListViewItem dazu gehört)
+        // NEU: Speichert die Fehlermeldung für die Detailansicht
+        public string ErrorMessage { get; set; }
+
         public object Tag { get; set; }
     }
-
 }

@@ -3,6 +3,7 @@ using ReaLTaiizor.Controls;
 using ReaLTaiizor.Forms;
 using ReaLTaiizor.Manager;
 using ReaLTaiizor.Util;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -10,109 +11,159 @@ namespace WinFormsApp3
 {
     public static class UiHelper
     {
+        // ... (ListView Code bleibt identisch wie oben, nichts ändern) ...
+        // Ich poste nur die Error Dialog Methoden neu, die anderen sind unverändert
+        // Bitte den Rest aus deinem vorherigen Stand übernehmen oder hier zusammenfügen.
+
         // ========================================================================
-        // LISTVIEW HELPERS
+        // LISTVIEW HELPERS (unverändert einfügen)
         // ========================================================================
-        public static void SetupListView(MaterialListView listView)
+        public static void SetupListView(MaterialListView listView, ImageList customIcons = null)
         {
-            listView.Font = new Font("Segoe UI", 12f, FontStyle.Regular);
+            var method = typeof(Control).GetMethod("SetStyle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
+            method?.Invoke(listView, new object[] { ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true });
 
-            ImageList imgList = new ImageList();
-            imgList.ImageSize = new Size(24, 24);
-            imgList.ColorDepth = ColorDepth.Depth32Bit;
-            imgList.Images.Add("dir", SystemIcons.Application);
-            imgList.Images.Add("file", SystemIcons.WinLogo);
-            listView.SmallImageList = imgList;
+            listView.View = View.Details;
+            listView.OwnerDraw = true;
+            listView.FullRowSelect = true;
+            listView.GridLines = false;
+            listView.Font = new Font("Segoe UI", 11f);
+            listView.BackColor = Color.FromArgb(50, 50, 50);
 
-            listView.Columns.Clear();
-            listView.Columns.Add("", 40);
-            listView.Columns.Add("Name", 300);
-            listView.Columns.Add("Größe", 100);
-            listView.Columns.Add("Geändert", 150);
-            listView.Columns.Add("Typ", 80);
+            if (customIcons != null) listView.SmallImageList = customIcons;
+
+            int hoveredIndex = -1;
+            listView.MouseMove += (s, e) => {
+                var hit = listView.HitTest(e.Location);
+                int newIndex = (hit.Item != null) ? hit.Item.Index : -1;
+                if (newIndex != hoveredIndex)
+                {
+                    if (hoveredIndex != -1 && hoveredIndex < listView.Items.Count) listView.Invalidate(listView.Items[hoveredIndex].Bounds);
+                    hoveredIndex = newIndex;
+                    if (hoveredIndex != -1) listView.Invalidate(listView.Items[hoveredIndex].Bounds);
+                }
+            };
+            listView.MouseLeave += (s, e) => {
+                if (hoveredIndex != -1)
+                {
+                    int old = hoveredIndex; hoveredIndex = -1;
+                    if (old < listView.Items.Count) listView.Invalidate(listView.Items[old].Bounds);
+                }
+            };
+
+            listView.DrawColumnHeader += (s, e) => {
+                Color headerBg = Color.FromArgb(45, 45, 48);
+                Color lineColor = Color.FromArgb(70, 70, 70);
+                using (var b = new SolidBrush(headerBg)) e.Graphics.FillRectangle(b, e.Bounds);
+
+                if (e.ColumnIndex == listView.Columns.Count - 1)
+                {
+                    int remainingWidth = listView.ClientRectangle.Width - e.Bounds.Right;
+                    if (remainingWidth > 0)
+                    {
+                        Rectangle filler = new Rectangle(e.Bounds.Right, e.Bounds.Y, remainingWidth, e.Bounds.Height);
+                        using (var b = new SolidBrush(headerBg)) e.Graphics.FillRectangle(b, filler);
+                        using (var p = new Pen(lineColor)) e.Graphics.DrawLine(p, filler.Left, filler.Bottom - 1, filler.Right, filler.Bottom - 1);
+                    }
+                }
+                using (var p = new Pen(lineColor)) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+                using (var f = new Font("Segoe UI", 11f, FontStyle.Bold))
+                {
+                    Rectangle r = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height);
+                    TextRenderer.DrawText(e.Graphics, e.Header.Text, f, r, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
+                }
+            };
+
+            listView.DrawItem += (s, e) => { e.DrawDefault = false; };
+
+            listView.DrawSubItem += (s, e) => {
+                if (e.Item == null) return;
+                Color bg = (e.ItemIndex % 2 == 0) ? Color.FromArgb(53, 53, 53) : Color.FromArgb(50, 50, 50);
+                if (e.Item.Selected) bg = Color.FromArgb(75, 75, 75);
+                else if (e.ItemIndex == hoveredIndex) bg = Color.FromArgb(62, 62, 62);
+
+                using (var b = new SolidBrush(bg))
+                {
+                    e.Graphics.FillRectangle(b, e.Bounds);
+                    if (e.ColumnIndex == listView.Columns.Count - 1)
+                    {
+                        int remainingWidth = listView.ClientRectangle.Width - e.Bounds.Right;
+                        if (remainingWidth > 0)
+                        {
+                            Rectangle filler = new Rectangle(e.Bounds.Right, e.Bounds.Y, remainingWidth, e.Bounds.Height);
+                            e.Graphics.FillRectangle(b, filler);
+                            using (var p = new Pen(Color.FromArgb(60, 60, 60))) e.Graphics.DrawLine(p, filler.Left, filler.Bottom - 1, filler.Right, filler.Bottom - 1);
+                        }
+                    }
+                }
+                using (var p = new Pen(Color.FromArgb(60, 60, 60))) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
+                if (e.ColumnIndex == 0)
+                {
+                    int x = e.Bounds.X + 10;
+                    if (listView.SmallImageList != null && !string.IsNullOrEmpty(e.Item.ImageKey) && listView.SmallImageList.Images.ContainsKey(e.Item.ImageKey))
+                    {
+                        e.Graphics.DrawImage(listView.SmallImageList.Images[e.Item.ImageKey], x, e.Bounds.Y + 6, 20, 20);
+                        x += 32;
+                    }
+                    Rectangle r = new Rectangle(x, e.Bounds.Y, e.Bounds.Width - (x - e.Bounds.X), e.Bounds.Height);
+                    TextRenderer.DrawText(e.Graphics, e.Item.Text, listView.Font, r, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                }
+                else
+                {
+                    TextRenderer.DrawText(e.Graphics, e.SubItem.Text, listView.Font, e.Bounds, Color.FromArgb(180, 180, 180), TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
+                }
+            };
         }
 
         public static void UpdateColumnWidths(MaterialListView listView)
         {
-            // Sicherheitscheck: Gibt es überhaupt Spalten?
-            if (listView.Columns.Count < 5 || listView.ClientSize.Width == 0) return;
+            if (listView.Columns.Count < 2 || listView.ClientSize.Width <= 0) return;
+            int fixedWidths = 0;
+            for (int i = 1; i < listView.Columns.Count; i++) fixedWidths += listView.Columns[i].Width;
+            int avail = listView.ClientSize.Width - fixedWidths;
+            if (avail > 50) listView.Columns[0].Width = avail;
+        }
 
-            int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width + listView.Columns[4].Width;
-
-            bool hasVerticalScroll = false;
-
-            // FIX: Try-Catch Block, falls ListView.GetItemRect(0) fehlschlägt
-            // Das passiert manchmal beim Neuladen oder wenn die Liste gerade geleert wurde.
-            try
-            {
-                if (listView.Items.Count > 0)
-                {
-                    var rect = listView.GetItemRect(0); // Hier knallte es vorher
-                    int itemHeight = rect.Height > 0 ? rect.Height : 25;
-
-                    if ((listView.Items.Count * itemHeight) > listView.ClientSize.Height)
-                    {
-                        hasVerticalScroll = true;
-                    }
-                }
-            }
-            catch
-            {
-                // Falls ein Fehler passiert (z.B. IndexOutOfRange), ignorieren wir ihn einfach.
-                // Wir nehmen an, es gibt keinen Scrollbalken, damit das Programm weiterläuft.
-                hasVerticalScroll = false;
-            }
-
-            int buffer = hasVerticalScroll ? SystemInformation.VerticalScrollBarWidth + 4 : 0;
-            int availableWidth = listView.ClientSize.Width - fixedWidth - buffer;
-
+        public static void UpdateTransferColumnWidths(MaterialListView listView)
+        {
+            if (listView.Columns.Count < 4 || listView.ClientSize.Width == 0) return;
+            int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width;
+            int availableWidth = listView.ClientSize.Width - fixedWidth - 4;
+            if (listView.Items.Count * 25 > listView.ClientSize.Height) availableWidth -= SystemInformation.VerticalScrollBarWidth;
             if (availableWidth > 50) listView.Columns[1].Width = availableWidth;
         }
 
-        // ========================================================================
-        // INPUT DIALOG
-        // ========================================================================
         public static string ShowInputDialog(string title, string hintText)
         {
             MaterialForm prompt = CreateBaseForm(title, 240);
-
             MaterialTextBoxEdit textBox = new MaterialTextBoxEdit();
             textBox.Hint = hintText;
             textBox.Location = new Point(20, 90);
             textBox.Width = 460;
             textBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
-
             MaterialButton btnOk = CreateButton("OK", DialogResult.OK, true, 390);
             MaterialButton btnCancel = CreateButton("Abbrechen", DialogResult.Cancel, false, 280);
-
             prompt.Controls.Add(textBox);
             prompt.Controls.Add(btnOk);
             prompt.Controls.Add(btnCancel);
             prompt.AcceptButton = btnOk;
             prompt.CancelButton = btnCancel;
-
             return prompt.ShowDialog() == DialogResult.OK ? textBox.Text : "";
         }
 
-        // ========================================================================
-        // NACHRICHTEN & BESTÄTIGUNGEN
-        // ========================================================================
-
-        // Blau: Für reine Informationen
         public static void ShowInfoDialog(string title, string message)
         {
             var scheme = new MaterialColorScheme(MaterialPrimary.Blue500, MaterialPrimary.Blue700, MaterialPrimary.Blue200, MaterialAccent.LightBlue200, MaterialTextShade.WHITE);
             ShowGenericDialog(title, message, "OK", scheme);
         }
 
-        // Grün: Für Erfolg (z.B. Download fertig)
         public static void ShowSuccessDialog(string title, string message)
         {
             var scheme = new MaterialColorScheme(MaterialPrimary.Green500, MaterialPrimary.Green700, MaterialPrimary.Green200, MaterialAccent.LightGreen200, MaterialTextShade.WHITE);
             ShowGenericDialog(title, message, "SUPER", scheme);
         }
 
-        // Rot: Für Fehler
         public static void ShowErrorDialog(string title, string message)
         {
             var scheme = new MaterialColorScheme(MaterialPrimary.Red500, MaterialPrimary.Red700, MaterialPrimary.Red200, MaterialAccent.Red400, MaterialTextShade.WHITE);
@@ -121,35 +172,36 @@ namespace WinFormsApp3
 
         public static void ShowScrollableErrorDialog(string title, string message)
         {
+            // Thread-Safety Check: Sollte immer vom Main Thread kommen, aber zur Sicherheit
+            // hier kein Invoke, da DownloadManager das jetzt explizit handhabt.
+
             var skinManager = MaterialSkinManager.Instance;
             var oldScheme = skinManager.ColorScheme;
 
-            // Rotes Schema für Alarm
             skinManager.ColorScheme = new MaterialColorScheme(
                 MaterialPrimary.Red500, MaterialPrimary.Red700,
                 MaterialPrimary.Red200, MaterialAccent.Red400,
                 MaterialTextShade.WHITE);
 
             MaterialForm prompt = new MaterialForm();
-            prompt.Width = 600;  // Breiter
-            prompt.Height = 500; // Höher
+            prompt.Width = 600;
+            prompt.Height = 500;
             prompt.Text = title;
             prompt.StartPosition = FormStartPosition.CenterParent;
-            prompt.Sizable = false; // Feste Größe
+            prompt.Sizable = false;
             skinManager.AddFormToManage(prompt);
 
-            // Scrollbare Textbox (RichTextBox ist besser für viel Text als Label)
             RichTextBox rtb = new RichTextBox();
             rtb.Text = message;
             rtb.Location = new Point(20, 80);
-            rtb.Size = new Size(560, 320); // Viel Platz!
+            rtb.Size = new Size(560, 320);
             rtb.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right | AnchorStyles.Bottom;
             rtb.ReadOnly = true;
-            rtb.BackColor = Color.FromArgb(50, 50, 50); // Dunkel passend zum Theme
+            rtb.BackColor = Color.FromArgb(50, 50, 50);
             rtb.ForeColor = Color.White;
             rtb.BorderStyle = BorderStyle.None;
-            rtb.ScrollBars = RichTextBoxScrollBars.Vertical; // WICHTIG: Scrollbalken
-            rtb.Font = new Font("Consolas", 10f); // Monospace Font für Code/HTML gut lesbar
+            rtb.ScrollBars = RichTextBoxScrollBars.Vertical;
+            rtb.Font = new Font("Consolas", 10f);
 
             MaterialButton btnOk = new MaterialButton();
             btnOk.Text = "Schließen";
@@ -168,39 +220,27 @@ namespace WinFormsApp3
             skinManager.ColorScheme = oldScheme;
         }
 
-        // Rot: Gefährliche Frage (Löschen)
         public static bool ShowDangerConfirmation(string title, string message)
         {
             var redScheme = new MaterialColorScheme(MaterialPrimary.Red500, MaterialPrimary.Red700, MaterialPrimary.Red200, MaterialAccent.Red400, MaterialTextShade.WHITE);
             return ShowConfirmationBase(title, message, "LÖSCHEN", redScheme);
         }
 
-        // Orange/Standard: Normale Frage (Logout) -> DAS HIER IST NEU FÜR DICH!
         public static bool ShowConfirmationDialog(string title, string message)
         {
-            // Wir nehmen das aktuelle Schema (Orange) oder setzen es explizit
-            //var orangeScheme = new MaterialColorScheme(MaterialPrimary.Orange500, MaterialPrimary.Orange700, MaterialPrimary.Orange200, MaterialAccent.DeepOrange400, MaterialTextShade.WHITE);
-            // Einfach null übergeben, dann nutzt er das aktuelle Design
             return ShowConfirmationBase(title, message, "JA", null);
         }
-
-        // ========================================================================
-        // PRIVATE HELFER (DRY - Don't Repeat Yourself)
-        // ========================================================================
 
         private static void ShowGenericDialog(string title, string message, string btnText, MaterialColorScheme scheme)
         {
             var oldScheme = MaterialSkinManager.Instance.ColorScheme;
             if (scheme != null) MaterialSkinManager.Instance.ColorScheme = scheme;
-
             MaterialForm prompt = CreateBaseForm(title, 240);
             AddLabel(prompt, message);
-
             MaterialButton btnOk = CreateButton(btnText, DialogResult.OK, true, 350, 130);
             prompt.Controls.Add(btnOk);
             prompt.AcceptButton = btnOk;
             prompt.CancelButton = btnOk;
-
             prompt.ShowDialog();
             MaterialSkinManager.Instance.ColorScheme = oldScheme;
         }
@@ -209,21 +249,16 @@ namespace WinFormsApp3
         {
             var oldScheme = MaterialSkinManager.Instance.ColorScheme;
             if (scheme != null) MaterialSkinManager.Instance.ColorScheme = scheme;
-
             MaterialForm prompt = CreateBaseForm(title, 250);
             AddLabel(prompt, message);
-
             MaterialButton btnYes = CreateButton(okText, DialogResult.OK, true, 370);
             MaterialButton btnNo = CreateButton("Abbrechen", DialogResult.Cancel, false, 250);
-
             prompt.Controls.Add(btnYes);
             prompt.Controls.Add(btnNo);
             prompt.AcceptButton = btnYes;
             prompt.CancelButton = btnNo;
-
             var result = prompt.ShowDialog();
             MaterialSkinManager.Instance.ColorScheme = oldScheme;
-
             return result == DialogResult.OK;
         }
 
@@ -246,6 +281,7 @@ namespace WinFormsApp3
             lbl.Location = new Point(20, 80);
             lbl.Size = new Size(460, 100);
             lbl.FontType = MaterialSkinManager.FontType.Body1;
+            lbl.TextAlign = ContentAlignment.MiddleLeft;
             lbl.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             form.Controls.Add(lbl);
         }
@@ -256,14 +292,22 @@ namespace WinFormsApp3
             btn.Text = text;
             btn.DialogResult = result;
             btn.Type = isPrimary ? MaterialButton.MaterialButtonType.Contained : MaterialButton.MaterialButtonType.Outlined;
-            btn.UseAccentColor = !isPrimary; // Trick für Farben
-            if (isPrimary) btn.UseAccentColor = false; // Primary nutzt Hauptfarbe
-
+            btn.UseAccentColor = !isPrimary;
+            if (isPrimary) btn.UseAccentColor = false;
             btn.AutoSize = false;
             btn.Size = new Size(width, 36);
             btn.Location = new Point(x, 190);
             btn.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             return btn;
+        }
+
+        public static string FormatByteSize(long bytes)
+        {
+            string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
+            int counter = 0;
+            decimal number = bytes;
+            while (Math.Round(number / 1024) >= 1) { number /= 1024; counter++; }
+            return string.Format("{0:n1} {1}", number, suffixes[counter]);
         }
     }
 }

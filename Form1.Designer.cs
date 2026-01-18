@@ -62,7 +62,7 @@
             lstRepos.MouseState = ReaLTaiizor.Helper.MaterialDrawHelper.MaterialMouseState.OUT;
             lstRepos.Name = "lstRepos";
             lstRepos.OwnerDraw = true;
-            lstRepos.Size = new Size(1619, 750);
+            lstRepos.Size = new Size(1665, 892);
             lstRepos.TabIndex = 6;
             lstRepos.UseCompatibleStateImageBehavior = false;
             lstRepos.View = View.Details;
@@ -79,12 +79,12 @@
             btnLogout.HighEmphasis = true;
             btnLogout.Icon = null;
             btnLogout.IconType = ReaLTaiizor.Controls.MaterialButton.MaterialIconType.Rebase;
-            btnLogout.Location = new Point(1523, 33);
+            btnLogout.Location = new Point(1514, 11);
             btnLogout.Margin = new Padding(4, 6, 4, 6);
             btnLogout.MouseState = ReaLTaiizor.Helper.MaterialDrawHelper.MaterialMouseState.HOVER;
             btnLogout.Name = "btnLogout";
             btnLogout.NoAccentTextColor = Color.Empty;
-            btnLogout.Size = new Size(95, 22);
+            btnLogout.Size = new Size(137, 36);
             btnLogout.TabIndex = 0;
             btnLogout.Text = "Ausloggen";
             btnLogout.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Text;
@@ -96,12 +96,13 @@
             // 
             panelActionbar.BackColor = Color.Transparent;
             panelActionbar.Controls.Add(materialButton1);
+            panelActionbar.Controls.Add(btnLogout);
             panelActionbar.Controls.Add(materialButton3);
             panelActionbar.Controls.Add(materialButton2);
             panelActionbar.Dock = DockStyle.Top;
             panelActionbar.Location = new Point(3, 64);
             panelActionbar.Name = "panelActionbar";
-            panelActionbar.Size = new Size(1619, 63);
+            panelActionbar.Size = new Size(1665, 63);
             panelActionbar.TabIndex = 8;
             // 
             // materialButton1
@@ -111,17 +112,17 @@
             materialButton1.Density = ReaLTaiizor.Controls.MaterialButton.MaterialButtonDensity.Default;
             materialButton1.Depth = 0;
             materialButton1.HighEmphasis = true;
-            materialButton1.Icon = (Image)resources.GetObject("materialButton1.Icon");
+            materialButton1.Icon = null;
             materialButton1.IconType = ReaLTaiizor.Controls.MaterialButton.MaterialIconType.Rebase;
-            materialButton1.Location = new Point(1499, 15);
+            materialButton1.Location = new Point(1406, 11);
             materialButton1.Margin = new Padding(4, 6, 4, 6);
             materialButton1.MouseState = ReaLTaiizor.Helper.MaterialDrawHelper.MaterialMouseState.HOVER;
             materialButton1.Name = "materialButton1";
             materialButton1.NoAccentTextColor = Color.Empty;
-            materialButton1.Size = new Size(107, 36);
+            materialButton1.Size = new Size(79, 36);
             materialButton1.TabIndex = 11;
             materialButton1.Text = "Suchen";
-            materialButton1.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Outlined;
+            materialButton1.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Text;
             materialButton1.UseAccentColor = false;
             materialButton1.UseVisualStyleBackColor = true;
             materialButton1.Click += btnSearch_Click;
@@ -132,19 +133,20 @@
             materialButton3.Density = ReaLTaiizor.Controls.MaterialButton.MaterialButtonDensity.Default;
             materialButton3.Depth = 0;
             materialButton3.HighEmphasis = true;
-            materialButton3.Icon = Properties.Resources.icons8_datei_löschen_40;
+            materialButton3.Icon = null;
             materialButton3.IconType = ReaLTaiizor.Controls.MaterialButton.MaterialIconType.Rebase;
-            materialButton3.Location = new Point(118, 15);
+            materialButton3.Location = new Point(117, 11);
             materialButton3.Margin = new Padding(4, 6, 4, 6);
             materialButton3.MouseState = ReaLTaiizor.Helper.MaterialDrawHelper.MaterialMouseState.HOVER;
             materialButton3.Name = "materialButton3";
             materialButton3.NoAccentTextColor = Color.Empty;
-            materialButton3.Size = new Size(116, 36);
+            materialButton3.Size = new Size(88, 36);
             materialButton3.TabIndex = 10;
             materialButton3.Text = "Löschen";
-            materialButton3.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Outlined;
+            materialButton3.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Text;
             materialButton3.UseAccentColor = false;
             materialButton3.UseVisualStyleBackColor = true;
+            materialButton3.Click += BtnDelete_Click;
             // 
             // materialButton2
             // 
@@ -152,31 +154,32 @@
             materialButton2.Density = ReaLTaiizor.Controls.MaterialButton.MaterialButtonDensity.Default;
             materialButton2.Depth = 0;
             materialButton2.HighEmphasis = true;
-            materialButton2.Icon = Properties.Resources.icons8_datei_hinzufügen_40;
+            materialButton2.Icon = null;
             materialButton2.IconType = ReaLTaiizor.Controls.MaterialButton.MaterialIconType.Rebase;
-            materialButton2.Location = new Point(17, 15);
+            materialButton2.Location = new Point(16, 11);
             materialButton2.Margin = new Padding(4, 6, 4, 6);
             materialButton2.MouseState = ReaLTaiizor.Helper.MaterialDrawHelper.MaterialMouseState.HOVER;
             materialButton2.Name = "materialButton2";
             materialButton2.NoAccentTextColor = Color.Empty;
-            materialButton2.Size = new Size(78, 36);
+            materialButton2.Size = new Size(64, 36);
             materialButton2.TabIndex = 10;
             materialButton2.Text = "Neu";
-            materialButton2.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Outlined;
+            materialButton2.Type = ReaLTaiizor.Controls.MaterialButton.MaterialButtonType.Text;
             materialButton2.UseAccentColor = false;
             materialButton2.UseVisualStyleBackColor = true;
+            materialButton2.Click += BtnNew_Click;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(1625, 880);
-            Controls.Add(btnLogout);
+            ClientSize = new Size(1671, 1022);
             Controls.Add(lstRepos);
             Controls.Add(panelActionbar);
             Controls.Add(lblStatus);
+            Icon = (Icon)resources.GetObject("$this.Icon");
             Name = "Form1";
-            Text = "Seafile Explorer";
+            Text = "BBS-ME File Explorer";
             Load += Form1_Load;
             panelActionbar.ResumeLayout(false);
             panelActionbar.PerformLayout();
