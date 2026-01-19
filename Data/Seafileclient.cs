@@ -2,13 +2,13 @@
 using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.IO;
 using System.Net;
 using System.Net.Http;
-using System.Threading.Tasks;
-using System.Linq;
+using System.Net.Http.Headers; // Wichtig für AuthenticationHeaderValue
 using System.Text;
-using System.Drawing; // Für Images
+using System.Threading.Tasks;
 
 namespace WinFormsApp3.Data
 {
@@ -26,7 +26,6 @@ namespace WinFormsApp3.Data
 
         private void InitializeClients()
         {
-            // Nutzung der dynamischen AppConfig URL
             _apiClient = new HttpClient { BaseAddress = new Uri(AppConfig.ApiBaseUrl), Timeout = TimeSpan.FromMinutes(5) };
             _fileDownloader = new HttpClient { Timeout = TimeSpan.FromMinutes(60) };
 
@@ -34,11 +33,18 @@ namespace WinFormsApp3.Data
             {
                 _apiClient.DefaultRequestHeaders.Add("Authorization", "Token " + _token);
             }
+
+            // Standard Header für CSRF Schutz
+            if (!string.IsNullOrEmpty(AppConfig.CSRFToken))
+            {
+                _apiClient.DefaultRequestHeaders.Add("X-CSRFToken", AppConfig.CSRFToken);
+            }
+            _apiClient.DefaultRequestHeaders.Add("Referer", AppConfig.ApiBaseUrl); // Seafile prüft oft Referer
+
             _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("SeafileExplorer/1.0");
             _fileDownloader.DefaultRequestHeaders.UserAgent.ParseAdd("SeafileExplorer/1.0");
         }
 
-        // Methode zum Neuladen wenn sich Einstellungen ändern
         public void ReloadSettings()
         {
             _apiClient?.Dispose();
@@ -80,27 +86,68 @@ namespace WinFormsApp3.Data
 
         public async Task<bool> DeleteEntryAsync(string repoId, string path, bool isDir)
         {
-            string url = isDir ? $"repos/{repoId}/dir/?p={Uri.EscapeDataString(path)}" : $"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}";
+            string url = isDir ?
+                $"repos/{repoId}/dir/?p={Uri.EscapeDataString(path)}" : $"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}";
             return (await _apiClient.DeleteAsync(url)).IsSuccessStatusCode;
         }
 
-        // NEU: Thumbnail laden
+        // --- MOVE OPERATION (HARDENED) ---
+        public async Task<bool> MoveEntryAsync(string repoId, string srcPath, string dstDir, string dstRepoId = null)
+        {
+            if (string.IsNullOrEmpty(dstRepoId)) dstRepoId = repoId;
+
+            // Pfad-Bereinigung für Seafile
+            if (dstDir.Length > 1 && dstDir.EndsWith("/")) dstDir = dstDir.TrimEnd('/');
+            if (string.IsNullOrEmpty(dstDir)) dstDir = "/";
+
+            var content = new FormUrlEncodedContent(new[]
+            {
+                new KeyValuePair<string, string>("operation", "move"),
+                new KeyValuePair<string, string>("dst_repo", dstRepoId),
+                new KeyValuePair<string, string>("dst_dir", dstDir)
+            });
+
+            string url = $"repos/{repoId}/file/?p={Uri.EscapeDataString(srcPath)}";
+
+            // Manuell Request bauen, um Header zu erzwingen
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Content = content;
+
+            // Authorization explizit setzen (überschreibt ggf. Fehler im DefaultHeader)
+            request.Headers.Authorization = new AuthenticationHeaderValue("Token", _token);
+
+            // CSRF Token falls vorhanden (ESSENTIELL für Session Auth)
+            if (!string.IsNullOrEmpty(AppConfig.CSRFToken))
+            {
+                if (request.Headers.Contains("X-CSRFToken")) request.Headers.Remove("X-CSRFToken");
+                request.Headers.Add("X-CSRFToken", AppConfig.CSRFToken);
+            }
+
+            // Referer setzen (gegen strikte Django Checks)
+            request.Headers.Referrer = new Uri(AppConfig.ApiBaseUrl);
+
+            var response = await _apiClient.SendAsync(request);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                string errorBody = await response.Content.ReadAsStringAsync();
+                throw new Exception($"Server Meldung ({response.StatusCode}): {errorBody}");
+            }
+            return true;
+        }
+
         public async Task<Image> GetThumbnailAsync(string repoId, string path, int size)
         {
             try
             {
-                // Thumbnail API Endpunkt
                 string url = $"repos/{repoId}/thumbnail/?p={Uri.EscapeDataString(path)}&size={size}";
                 var bytes = await _apiClient.GetByteArrayAsync(url);
                 if (bytes != null && bytes.Length > 0)
                 {
-                    using (var ms = new MemoryStream(bytes))
-                    {
-                        return Image.FromStream(ms);
-                    }
+                    using (var ms = new MemoryStream(bytes)) return Image.FromStream(ms);
                 }
             }
-            catch { /* Ignorieren, Fallback Icon nutzen */ }
+            catch { }
             return null;
         }
 
@@ -135,12 +182,8 @@ namespace WinFormsApp3.Data
             catch { return json.Trim('"'); }
         }
 
-        // =================================================================================
-        // MANUELLE UPLOAD IMPLEMENTIERUNG (Behebt 400 Bad Request zuverlässig)
-        // =================================================================================
-        public async Task UploadFileWithProgressAsync(string uploadLink, string localFilePath, string targetPath, string fileName, Action<int> onProgress)
+        public async Task UploadFileWithProgressAsync(string uploadLink, string localFilePath, string targetPath, string fileName, Action<long, long> onProgress)
         {
-            // Pfad-Bereinigung
             string parentDir = targetPath.Replace("\\", "/").Trim();
             if (!parentDir.StartsWith("/")) parentDir = "/" + parentDir;
             if (parentDir.Length > 1 && parentDir.EndsWith("/")) parentDir = parentDir.TrimEnd('/');
@@ -149,41 +192,44 @@ namespace WinFormsApp3.Data
             byte[] boundaryBytes = Encoding.ASCII.GetBytes("\r\n--" + boundary + "\r\n");
             byte[] endBoundaryBytes = Encoding.ASCII.GetBytes("\r\n--" + boundary + "--\r\n");
 
-            // Wir bauen den Request Body manuell zusammen, um die volle Kontrolle über Header zu haben.
             using (var fileStream = File.OpenRead(localFilePath))
             using (var contentStream = new MemoryStream())
             {
-                // 1. Parameter: parent_dir
                 WriteMultipartParam(contentStream, boundary, "parent_dir", parentDir);
+                WriteMultipartParam(contentStream, boundary, "replace", "0");
 
-                // 2. Parameter: replace
-                WriteMultipartParam(contentStream, boundary, "replace", "1");
-
-                // 3. File Header
                 string fileHeader = $"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{fileName}\"\r\nContent-Type: application/octet-stream\r\n\r\n";
                 byte[] fileHeaderBytes = Encoding.UTF8.GetBytes(fileHeader);
                 contentStream.Write(fileHeaderBytes, 0, fileHeaderBytes.Length);
 
-                // Request starten
                 var request = new HttpRequestMessage(HttpMethod.Post, uploadLink);
-                request.Headers.Add("User-Agent", "SeafileExplorer/1.0"); // Seafile mag User-Agents
+                request.Headers.Add("User-Agent", "SeafileExplorer/1.0");
 
-                // WICHTIG: Den Stream kombinieren (Header + Datei + Footer)
-                var combinedContent = new ManualMultipartContent(contentStream.ToArray(), fileStream, endBoundaryBytes, boundary, (sent, total) =>
-                {
-                    onProgress?.Invoke((int)((double)sent / total * 100));
-                });
+                var combinedContent = new ManualMultipartContent(contentStream.ToArray(), fileStream, endBoundaryBytes, boundary, onProgress);
 
                 request.Content = combinedContent;
-
                 var response = await _fileDownloader.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
 
                 if (!response.IsSuccessStatusCode)
                 {
-                    string errorMsg = await response.Content.ReadAsStringAsync();
-                    throw new Exception($"Upload fehlgeschlagen (HTTP {response.StatusCode}): {errorMsg}");
+                    string rawError = await response.Content.ReadAsStringAsync();
+                    throw new Exception(ParseSeafileError(response.StatusCode, rawError));
                 }
             }
+        }
+
+        private string ParseSeafileError(HttpStatusCode code, string rawBody)
+        {
+            string clean = rawBody.Trim();
+            if (code == HttpStatusCode.BadRequest)
+            {
+                if (clean.Contains("parent_dir")) return "Zielordner existiert nicht oder Pfad ungültig.";
+                if (clean.Contains("file already exists")) return "Datei existiert bereits.";
+                if (clean.Contains("quota")) return "Speicherplatz voll.";
+            }
+            if (code == HttpStatusCode.RequestEntityTooLarge) return "Datei ist zu groß.";
+            if (code == HttpStatusCode.Forbidden) return "Keine Schreibrechte.";
+            return $"Server Fehler ({(int)code}): {clean}";
         }
 
         private void WriteMultipartParam(Stream stream, string boundary, string name, string value)
@@ -193,12 +239,13 @@ namespace WinFormsApp3.Data
             stream.Write(bytes, 0, bytes.Length);
         }
 
-        public async Task DownloadFileWithProgressAsync(string url, string localOutputPath, Action<int> onProgress)
+        public async Task DownloadFileWithProgressAsync(string url, string localOutputPath, Action<long, long> onProgress)
         {
             using (var resp = await _fileDownloader.GetAsync(url, HttpCompletionOption.ResponseHeadersRead))
             {
                 if (!resp.IsSuccessStatusCode) throw new Exception($"Status: {resp.StatusCode}");
-                long? total = resp.Content.Headers.ContentLength;
+                long total = resp.Content.Headers.ContentLength ?? 0;
+
                 using (var sRead = await resp.Content.ReadAsStreamAsync())
                 using (var sWrite = File.Open(localOutputPath, FileMode.Create))
                 {
@@ -209,7 +256,7 @@ namespace WinFormsApp3.Data
                     {
                         await sWrite.WriteAsync(buffer, 0, read);
                         readTotal += read;
-                        if (total.HasValue) onProgress?.Invoke((int)((double)readTotal / total.Value * 100));
+                        onProgress?.Invoke(readTotal, total);
                     }
                 }
             }
@@ -224,7 +271,6 @@ namespace WinFormsApp3.Data
         }
     }
 
-    // Hilfsklasse für manuellen Multipart-Upload ohne Speicherüberlauf
     public class ManualMultipartContent : HttpContent
     {
         private readonly byte[] _head;
@@ -240,8 +286,6 @@ namespace WinFormsApp3.Data
             _tail = tail;
             _progress = progress;
             _totalSize = _head.Length + _fileStream.Length + _tail.Length;
-
-            // Wichtig: Content-Type Header manuell setzen, aber ohne Anführungszeichen bei Boundary!
             Headers.TryAddWithoutValidation("Content-Type", "multipart/form-data; boundary=" + boundary);
         }
 
@@ -253,24 +297,18 @@ namespace WinFormsApp3.Data
 
         protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
         {
-            // 1. Header schreiben (Parameter)
             await stream.WriteAsync(_head, 0, _head.Length);
-
-            // 2. Datei streamen mit Progress
             byte[] buffer = new byte[8192];
             long bytesSent = _head.Length;
             int bytesRead;
 
             if (_fileStream.CanSeek) _fileStream.Position = 0;
-
             while ((bytesRead = await _fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
             {
                 await stream.WriteAsync(buffer, 0, bytesRead);
                 bytesSent += bytesRead;
                 _progress?.Invoke(bytesSent, _totalSize);
             }
-
-            // 3. Ende schreiben
             await stream.WriteAsync(_tail, 0, _tail.Length);
             _progress?.Invoke(_totalSize, _totalSize);
         }
