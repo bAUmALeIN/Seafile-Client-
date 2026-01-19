@@ -8,33 +8,42 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using System.Linq;
 using System.Text;
+using System.Drawing; // Für Images
 
 namespace WinFormsApp3.Data
 {
     public class SeafileClient
     {
-        private static readonly HttpClient _apiClient;
-        private static readonly HttpClient _fileDownloader;
+        private HttpClient _apiClient;
+        private HttpClient _fileDownloader;
         private readonly string _token;
-
-        static SeafileClient()
-        {
-            _apiClient = new HttpClient { BaseAddress = new Uri(AppConfig.ApiBaseUrl), Timeout = TimeSpan.FromMinutes(5) };
-            _fileDownloader = new HttpClient { Timeout = TimeSpan.FromMinutes(60) };
-        }
 
         public SeafileClient(string token)
         {
             _token = token;
-            if (!_apiClient.DefaultRequestHeaders.Contains("Authorization"))
+            InitializeClients();
+        }
+
+        private void InitializeClients()
+        {
+            // Nutzung der dynamischen AppConfig URL
+            _apiClient = new HttpClient { BaseAddress = new Uri(AppConfig.ApiBaseUrl), Timeout = TimeSpan.FromMinutes(5) };
+            _fileDownloader = new HttpClient { Timeout = TimeSpan.FromMinutes(60) };
+
+            if (!string.IsNullOrEmpty(_token))
             {
-                _apiClient.DefaultRequestHeaders.Add("Authorization", "Token " + token);
-                _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("SeafileExplorer/1.0");
+                _apiClient.DefaultRequestHeaders.Add("Authorization", "Token " + _token);
             }
-            if (!_fileDownloader.DefaultRequestHeaders.UserAgent.Any())
-            {
-                _fileDownloader.DefaultRequestHeaders.UserAgent.ParseAdd("SeafileExplorer/1.0");
-            }
+            _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("SeafileExplorer/1.0");
+            _fileDownloader.DefaultRequestHeaders.UserAgent.ParseAdd("SeafileExplorer/1.0");
+        }
+
+        // Methode zum Neuladen wenn sich Einstellungen ändern
+        public void ReloadSettings()
+        {
+            _apiClient?.Dispose();
+            _fileDownloader?.Dispose();
+            InitializeClients();
         }
 
         public async Task<List<SeafileRepo>> GetLibrariesAsync()
@@ -73,6 +82,26 @@ namespace WinFormsApp3.Data
         {
             string url = isDir ? $"repos/{repoId}/dir/?p={Uri.EscapeDataString(path)}" : $"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}";
             return (await _apiClient.DeleteAsync(url)).IsSuccessStatusCode;
+        }
+
+        // NEU: Thumbnail laden
+        public async Task<Image> GetThumbnailAsync(string repoId, string path, int size)
+        {
+            try
+            {
+                // Thumbnail API Endpunkt
+                string url = $"repos/{repoId}/thumbnail/?p={Uri.EscapeDataString(path)}&size={size}";
+                var bytes = await _apiClient.GetByteArrayAsync(url);
+                if (bytes != null && bytes.Length > 0)
+                {
+                    using (var ms = new MemoryStream(bytes))
+                    {
+                        return Image.FromStream(ms);
+                    }
+                }
+            }
+            catch { /* Ignorieren, Fallback Icon nutzen */ }
+            return null;
         }
 
         public async Task<string> GetDownloadLinkAsync(string repoId, string path)
@@ -140,7 +169,6 @@ namespace WinFormsApp3.Data
                 request.Headers.Add("User-Agent", "SeafileExplorer/1.0"); // Seafile mag User-Agents
 
                 // WICHTIG: Den Stream kombinieren (Header + Datei + Footer)
-                // Da MemoryStream für große Dateien schlecht ist, nutzen wir eine Custom Content Klasse
                 var combinedContent = new ManualMultipartContent(contentStream.ToArray(), fileStream, endBoundaryBytes, boundary, (sent, total) =>
                 {
                     onProgress?.Invoke((int)((double)sent / total * 100));

@@ -23,6 +23,7 @@ namespace WinFormsApp3.Data
 
         public void SetupWebViewEnvironment()
         {
+            if (_webView == null) return;
             _webView.CreationProperties = new CoreWebView2CreationProperties
             {
                 UserDataFolder = _userDataFolder
@@ -31,77 +32,19 @@ namespace WinFormsApp3.Data
 
         public async Task InitializeAsync()
         {
+            if (_webView == null) return;
             await _webView.EnsureCoreWebView2Async();
-
-
             _webView.SourceChanged += WebView_SourceChanged;
         }
-
 
         private async void WebView_SourceChanged(object sender, CoreWebView2SourceChangedEventArgs e)
         {
             string currentUrl = _webView.Source.ToString().ToLower();
 
-
             if (currentUrl.Contains("bbs") && !currentUrl.Contains("seafile.bbs-me.org"))
             {
-                string script = @"
-                    (function() {
-                        //(Lock)
-                        if (window.seafileAutoClickerRunning) return;
-                        window.seafileAutoClickerRunning = true;
-
-                        console.log('Auto-Clicker gestartet für: ' + window.location.href);
-
-                        var attempts = 0;
-                        var maxAttempts = 60; // 30 Sekunden lang probieren
-                        
-                        function tryClickSeafile() {
-                            attempts++;
-                            
-                            // Conatiner Suche 
-                            var apps = document.querySelectorAll('.appBubbleClass');
-                            
-                            
-                            if (apps.length === 0) return false;
-
-                            for(var i = 0; i < apps.length; i++) {
-                                
-                                var text = (apps[i].innerText || '').toLowerCase();
-                                
-                                if(text.includes('seafile')) {
-                                    console.log('Seafile gefunden! Klicke...');
-
-                                    
-                                    var btn = apps[i].querySelector('button');
-                                    if(btn) {
-                                        btn.click();
-                                        return true; 
-                                    }
-                                    
-                                    
-                                    apps[i].click(); 
-                                    return true;
-                                }
-                            }
-                            return false;
-                        }
-
-                        
-                        var intervalId = setInterval(function() {
-                            var success = tryClickSeafile();
-                            
-                            
-                            if (success || attempts >= maxAttempts) {
-                                clearInterval(intervalId);
-                                // Lock wieder freigeben (optional, eigentlich sind wir dann eh weg)
-                                window.seafileAutoClickerRunning = false; 
-                            }
-                        }, 500);
-                    })();
-                ";
-
-                await _webView.ExecuteScriptAsync(script);
+                // JavaScript aus zentraler Konstante laden
+                await _webView.ExecuteScriptAsync(AppConstants.Scripts.SeafileAutoClicker);
             }
         }
 
@@ -124,7 +67,7 @@ namespace WinFormsApp3.Data
 
         public async Task<string> TryExtractTokenAsync()
         {
-            if (_webView.CoreWebView2 == null) return null;
+            if (_webView?.CoreWebView2 == null) return null;
 
             try
             {
