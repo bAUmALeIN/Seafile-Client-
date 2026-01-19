@@ -4,7 +4,7 @@
   <img src="Resources/app_logo.png" alt="Seafile Client Logo" width="150">
   <br><br>
   
-  <img src="https://img.shields.io/badge/Version-v1.0%20(Beta)-orange?style=flat-square" alt="Version 1.0 Beta">
+  <img src="https://img.shields.io/badge/Version-v1.0%20(Beta)-orange?style=flat-square" alt="Version 1.2.1 Beta">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 8.0">
   <br><br>
@@ -21,7 +21,7 @@
 >*Es ist nicht für den produktiven Einsatz oder zur Umgehung administrativer Richtlinien gedacht**.**
 
 >[!NOTE]
-> **Status: Version 1.0 (Public Beta)** > Dies ist das erste Release. Es können noch Bugs oder unerwartete Fehler auftreten.  
+> **Status: Version 1.2.1 (Public Beta)** > Dies ist das erste Release (V1.x.x). Es können noch Bugs oder unerwartete Fehler auftreten.  
 > Da ich dieses Projekt **neben der Abendschule** entwickle, bitte ich um etwas Geduld bei Fixes. Ich versuche aber, gemeldete Probleme so zeitnah wie möglich zu beheben!
 
 <br>
