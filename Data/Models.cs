@@ -13,8 +13,11 @@ namespace WinFormsApp3.Data
         public static string DbConnectionString { get; } = "Data Source=seafile_data.db";
         public static string WebViewUserDataFolder { get; } = "WebView2_UserData";
 
-        // NEU: Globaler Speicher für den CSRF Token
+        // Globaler Speicher für den CSRF Token
         public static string CSRFToken { get; set; } = "";
+
+        // NEU: Globaler Speicher für den kompletten Cookie-String (Der "Session Key")
+        public static string RawCookies { get; set; } = "";
 
         public static class SettingsKeys
         {
