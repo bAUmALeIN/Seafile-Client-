@@ -19,6 +19,7 @@ namespace WinFormsApp3.Data
             {
                 connection.Open();
                 var cmd = connection.CreateCommand();
+                // Tabelle ist generisch key/value
                 cmd.CommandText = @"
                     CREATE TABLE IF NOT EXISTS Settings (
                         Key TEXT PRIMARY KEY,
@@ -28,19 +29,20 @@ namespace WinFormsApp3.Data
             }
         }
 
-        public void SaveToken(string token)
+        public void SaveSetting(string key, string value)
         {
             using (var connection = new SqliteConnection(_connectionString))
             {
                 connection.Open();
                 var cmd = connection.CreateCommand();
-                cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key, Value) VALUES ('api_token', @token);";
-                cmd.Parameters.AddWithValue("@token", token);
+                cmd.CommandText = "INSERT OR REPLACE INTO Settings (Key, Value) VALUES (@key, @value);";
+                cmd.Parameters.AddWithValue("@key", key);
+                cmd.Parameters.AddWithValue("@value", value ?? string.Empty);
                 cmd.ExecuteNonQuery();
             }
         }
 
-        public string GetToken()
+        public string GetSetting(string key)
         {
             try
             {
@@ -48,7 +50,8 @@ namespace WinFormsApp3.Data
                 {
                     connection.Open();
                     var cmd = connection.CreateCommand();
-                    cmd.CommandText = "SELECT Value FROM Settings WHERE Key = 'api_token' LIMIT 1;";
+                    cmd.CommandText = "SELECT Value FROM Settings WHERE Key = @key LIMIT 1;";
+                    cmd.Parameters.AddWithValue("@key", key);
                     var result = cmd.ExecuteScalar();
                     return result?.ToString();
                 }
@@ -56,6 +59,9 @@ namespace WinFormsApp3.Data
             catch { return null; }
         }
 
+        // Wrapper für Token (für Kompatibilität mit altem Code)
+        public void SaveToken(string token) => SaveSetting(AppConfig.SettingsKeys.ApiToken, token);
+        public string GetToken() => GetSetting(AppConfig.SettingsKeys.ApiToken);
         public void DeleteToken()
         {
             using (var connection = new SqliteConnection(_connectionString))

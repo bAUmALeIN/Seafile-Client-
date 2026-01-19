@@ -5,10 +5,25 @@ namespace WinFormsApp3.Data
 {
     public static class AppConfig
     {
-        public const string ApiBaseUrl = "https://seafile.bbs-me.org/api2/";
-        public const string DbConnectionString = "Data Source=seafile_data.db";
-        public const string WebViewUserDataFolder = "WebView2_UserData";
-        public const string LoginUrl = "https://bbs-me.org/app/Seafile/12";
+        // Standardwerte (Falls DB leer ist)
+        private const string DefaultApiUrl = "https://seafile.bbs-me.org/api2/";
+        private const string DefaultLoginUrl = "https://bbs-me.org/app/Seafile/12";
+
+        // Dynamische Properties - werden zur Laufzeit geändert/geladen
+        public static string ApiBaseUrl { get; set; } = DefaultApiUrl;
+        public static string LoginUrl { get; set; } = DefaultLoginUrl;
+
+        // Konstanten, die sich nicht ändern
+        public static string DbConnectionString { get; } = "Data Source=seafile_data.db";
+        public static string WebViewUserDataFolder { get; } = "WebView2_UserData";
+
+        // Keys für die Datenbank-Tabelle "Settings"
+        public static class SettingsKeys
+        {
+            public const string ApiUrl = "api_url";
+            public const string LoginUrl = "login_url";
+            public const string ApiToken = "api_token";
+        }
     }
 
     public class SeafileRepo
@@ -42,7 +57,7 @@ namespace WinFormsApp3.Data
         public int Progress { get; set; } = 0;
         public DateTime StartTime { get; set; } = DateTime.Now;
 
-        // NEU: Speichert die Fehlermeldung für die Detailansicht
+        // Speichert die Fehlermeldung für die Detailansicht
         public string ErrorMessage { get; set; }
 
         public object Tag { get; set; }

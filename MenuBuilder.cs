@@ -18,9 +18,11 @@ namespace WinFormsApp3
             ctxMenu.Renderer = new ToolStripProfessionalRenderer(new DarkColorTable());
 
             ToolStripMenuItem itemDownload = new ToolStripMenuItem("Herunterladen");
+            itemDownload.Name = "ItemDownload"; // WICHTIG für Zugriff
             itemDownload.Click += downloadHandler;
 
             ToolStripMenuItem itemDelete = new ToolStripMenuItem("Löschen");
+            itemDelete.Name = "ItemDelete"; // WICHTIG für Zugriff
             itemDelete.Click += deleteHandler;
 
             ctxMenu.Items.Add(itemDownload);
