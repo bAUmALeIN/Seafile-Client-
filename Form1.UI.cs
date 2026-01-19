@@ -63,7 +63,10 @@ namespace WinFormsApp3
                 Cursor = Cursors.Default
             };
             try { _appIcon.Image = Properties.Resources.app_logo; }
-            catch { _appIcon.Image = Properties.Resources.icon_repo; }
+            catch
+            {
+                _appIcon.Image = Properties.Resources.icon_repo;
+            }
 
             this.Text = "BBS-ME File Explorer";
         }
@@ -71,7 +74,6 @@ namespace WinFormsApp3
         private void InitializeTabs()
         {
             Color darkBackground = Color.FromArgb(50, 50, 50);
-
             _tabControl = new MaterialTabControl
             {
                 Depth = 0,
@@ -81,16 +83,15 @@ namespace WinFormsApp3
                 SelectedIndex = 0,
                 Size = new Size(this.ClientSize.Width, this.ClientSize.Height - 112),
                 TabIndex = 100,
-                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Anchor = AnchorStyles.Top |
+                AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
-
             _tabFiles = new System.Windows.Forms.TabPage { Text = "Dateien", BackColor = darkBackground };
             _tabDownloads = new System.Windows.Forms.TabPage { Text = "Transfers", BackColor = darkBackground };
 
             _tabControl.Controls.Add(_tabFiles);
             _tabControl.Controls.Add(_tabDownloads);
             this.Controls.Add(_tabControl);
-
             _tabSelector = new MaterialTabSelector
             {
                 BaseTabControl = _tabControl,
@@ -101,7 +102,8 @@ namespace WinFormsApp3
                 Name = "tabSelector1",
                 Size = new Size(this.ClientSize.Width, 48),
                 TabIndex = 99,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+                Anchor = AnchorStyles.Top |
+                AnchorStyles.Left | AnchorStyles.Right,
                 CharacterCasing = MaterialTabSelector.CustomCharacterCasing.Normal
             };
             this.Controls.Add(_tabSelector);
@@ -143,7 +145,6 @@ namespace WinFormsApp3
                 View = View.Details,
                 BackColor = background
             };
-
             _lstDownloads.Columns.Add("Datei / Ordner", 400);
             _lstDownloads.Columns.Add("Status", 200);
             _lstDownloads.Columns.Add("Rate", 120);
@@ -151,14 +152,16 @@ namespace WinFormsApp3
             _lstDownloads.Columns.Add("Startzeit", 120);
 
             UiHelper.SetupListView(_lstDownloads);
-
             ImageList downloadIcons = new ImageList { ImageSize = new Size(24, 24), ColorDepth = ColorDepth.Depth32Bit };
             downloadIcons.Images.Add("upload", Properties.Resources.icon_upload);
             downloadIcons.Images.Add("download", Properties.Resources.icon_download);
             _lstDownloads.SmallImageList = downloadIcons;
 
             _lstDownloads.SizeChanged += (s, e) => UiHelper.UpdateTransferColumnWidths(_lstDownloads);
-            _lstDownloads.ColumnWidthChanging += (s, e) => { e.Cancel = true; e.NewWidth = _lstDownloads.Columns[e.ColumnIndex].Width; };
+            _lstDownloads.ColumnWidthChanging += (s, e) => {
+                e.Cancel = true;
+                e.NewWidth = _lstDownloads.Columns[e.ColumnIndex].Width;
+            };
             _lstDownloads.DoubleClick += _lstDownloads_DoubleClick;
         }
 
@@ -183,10 +186,10 @@ namespace WinFormsApp3
                 BackColor = Color.Transparent,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                Anchor = AnchorStyles.Top | AnchorStyles.Left,
+                Anchor = AnchorStyles.Top |
+                AnchorStyles.Left,
                 Location = new Point(startX, 15)
             };
-
             actionPanel.Controls.Add(_flowPath);
             _flowPath.BringToFront();
 
@@ -204,7 +207,6 @@ namespace WinFormsApp3
             ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click);
             ToolStripMenuItem itemJump = new ToolStripMenuItem("Gehe zu") { Name = "ItemJump", Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_jump, 16, 16) };
             itemJump.Click += CtxJumpTo_Click;
-
             ctxMenu.Items.Insert(0, new ToolStripSeparator());
             ctxMenu.Items.Insert(0, itemJump);
 
@@ -213,7 +215,6 @@ namespace WinFormsApp3
 
             ctxMenu.Opening += CtxMenu_Opening;
             lstRepos.ContextMenuStrip = ctxMenu;
-
             UiHelper.SetupListView(lstRepos, _repoIcons);
             lstRepos.Columns.Clear();
             lstRepos.Columns.Add("Name", 400);
@@ -228,12 +229,18 @@ namespace WinFormsApp3
             lstRepos.AllowDrop = true;
             lstRepos.ItemDrag += lstRepos_ItemDrag;
             lstRepos.DragEnter += LstRepos_DragEnter;
-            lstRepos.DragOver += LstRepos_DragOver; // <--- DAS IST NEU UND WICHTIG!
+            lstRepos.DragOver += LstRepos_DragOver;
             lstRepos.DragDrop += LstRepos_DragDrop;
             lstRepos.GiveFeedback += lstRepos_GiveFeedback;
+            // NEU: Damit das Highlight verschwindet
+            lstRepos.DragLeave += LstRepos_DragLeave;
 
             ReplaceMaterialButtonsWithStandard();
-            try { if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].BackColor = Color.FromArgb(45, 45, 48); } catch { }
+            try
+            {
+                if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].BackColor = Color.FromArgb(45, 45, 48);
+            }
+            catch { }
         }
 
         private void ReplaceMaterialButtonsWithStandard()
@@ -243,14 +250,12 @@ namespace WinFormsApp3
             else if (_tabFiles.Controls.ContainsKey("panelActionbar")) actionPanel = _tabFiles.Controls["panelActionbar"];
 
             if (actionPanel == null) return;
-
             var toRemove = actionPanel.Controls.OfType<Control>()
                 .Where(c => c is MaterialButton || c.Name.StartsWith("materialButton") || c.Name == "btnLogout" || c.Name == "btnSettings" || c.Name == "btnSearch" || c is System.Windows.Forms.Button)
                 .ToList();
             foreach (var c in toRemove) actionPanel.Controls.Remove(c);
 
             actionPanel.BackColor = Color.FromArgb(45, 45, 48);
-
             if (_appIcon != null)
             {
                 _appIcon.Parent = actionPanel;
@@ -259,7 +264,8 @@ namespace WinFormsApp3
                 _appIcon.BringToFront();
             }
 
-            int leftX = (_appIcon != null) ? _appIcon.Right + 15 : 10;
+            int leftX = (_appIcon != null) ?
+                _appIcon.Right + 15 : 10;
             int btnY = 12;
             int rightEdge = actionPanel.Width - 10;
 
@@ -276,7 +282,6 @@ namespace WinFormsApp3
             btnOut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnOut.Click += btnLogout_Click;
             actionPanel.Controls.Add(btnOut);
-
             System.Windows.Forms.Button btnSearch = CreateFlatButton("SUCHEN", Properties.Resources.icon_search);
             btnSearch.Name = "btnSearch";
             btnSearch.Location = new Point(btnOut.Left - 10 - btnSearch.Width, btnY);
