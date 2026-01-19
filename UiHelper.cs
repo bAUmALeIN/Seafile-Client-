@@ -11,12 +11,8 @@ namespace WinFormsApp3
 {
     public static class UiHelper
     {
-        // ... (ListView Code bleibt identisch wie oben, nichts ändern) ...
-        // Ich poste nur die Error Dialog Methoden neu, die anderen sind unverändert
-        // Bitte den Rest aus deinem vorherigen Stand übernehmen oder hier zusammenfügen.
-
         // ========================================================================
-        // LISTVIEW HELPERS (unverändert einfügen)
+        // LISTVIEW HELPERS
         // ========================================================================
         public static void SetupListView(MaterialListView listView, ImageList customIcons = null)
         {
@@ -29,7 +25,6 @@ namespace WinFormsApp3
             listView.GridLines = false;
             listView.Font = new Font("Segoe UI", 11f);
             listView.BackColor = Color.FromArgb(50, 50, 50);
-
             if (customIcons != null) listView.SmallImageList = customIcons;
 
             int hoveredIndex = -1;
@@ -46,16 +41,15 @@ namespace WinFormsApp3
             listView.MouseLeave += (s, e) => {
                 if (hoveredIndex != -1)
                 {
-                    int old = hoveredIndex; hoveredIndex = -1;
+                    int old = hoveredIndex;
+                    hoveredIndex = -1;
                     if (old < listView.Items.Count) listView.Invalidate(listView.Items[old].Bounds);
                 }
             };
-
             listView.DrawColumnHeader += (s, e) => {
                 Color headerBg = Color.FromArgb(45, 45, 48);
                 Color lineColor = Color.FromArgb(70, 70, 70);
                 using (var b = new SolidBrush(headerBg)) e.Graphics.FillRectangle(b, e.Bounds);
-
                 if (e.ColumnIndex == listView.Columns.Count - 1)
                 {
                     int remainingWidth = listView.ClientRectangle.Width - e.Bounds.Right;
@@ -73,14 +67,30 @@ namespace WinFormsApp3
                     TextRenderer.DrawText(e.Graphics, e.Header.Text, f, r, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
                 }
             };
-
             listView.DrawItem += (s, e) => { e.DrawDefault = false; };
-
             listView.DrawSubItem += (s, e) => {
                 if (e.Item == null) return;
+
+                // 1. Drop Target ermitteln (via Tag)
+                int dropTargetIndex = (listView.Tag is int val) ? val : -1;
+
+                // 2. Hintergrundfarbe bestimmen
+                // Priority: DropTarget > Selected > Hover > Default
                 Color bg = (e.ItemIndex % 2 == 0) ? Color.FromArgb(53, 53, 53) : Color.FromArgb(50, 50, 50);
-                if (e.Item.Selected) bg = Color.FromArgb(75, 75, 75);
-                else if (e.ItemIndex == hoveredIndex) bg = Color.FromArgb(62, 62, 62);
+
+                if (e.ItemIndex == dropTargetIndex)
+                {
+                    // HIGHLIGHT FARBE: Helleres Grau/Blau für das Drop-Ziel
+                    bg = Color.FromArgb(80, 80, 90);
+                }
+                else if (e.Item.Selected)
+                {
+                    bg = Color.FromArgb(75, 75, 75);
+                }
+                else if (e.ItemIndex == hoveredIndex)
+                {
+                    bg = Color.FromArgb(62, 62, 62);
+                }
 
                 using (var b = new SolidBrush(bg))
                 {
@@ -97,7 +107,6 @@ namespace WinFormsApp3
                     }
                 }
                 using (var p = new Pen(Color.FromArgb(60, 60, 60))) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
-
                 if (e.ColumnIndex == 0)
                 {
                     int x = e.Bounds.X + 10;
@@ -141,7 +150,8 @@ namespace WinFormsApp3
             textBox.Hint = hintText;
             textBox.Location = new Point(20, 90);
             textBox.Width = 460;
-            textBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
+            textBox.Anchor = AnchorStyles.Top |
+                AnchorStyles.Left | AnchorStyles.Right;
             MaterialButton btnOk = CreateButton("OK", DialogResult.OK, true, 390);
             MaterialButton btnCancel = CreateButton("Abbrechen", DialogResult.Cancel, false, 280);
             prompt.Controls.Add(textBox);
@@ -172,9 +182,6 @@ namespace WinFormsApp3
 
         public static void ShowScrollableErrorDialog(string title, string message)
         {
-            // Thread-Safety Check: Sollte immer vom Main Thread kommen, aber zur Sicherheit
-            // hier kein Invoke, da DownloadManager das jetzt explizit handhabt.
-
             var skinManager = MaterialSkinManager.Instance;
             var oldScheme = skinManager.ColorScheme;
 
@@ -182,7 +189,6 @@ namespace WinFormsApp3
                 MaterialPrimary.Red500, MaterialPrimary.Red700,
                 MaterialPrimary.Red200, MaterialAccent.Red400,
                 MaterialTextShade.WHITE);
-
             MaterialForm prompt = new MaterialForm();
             prompt.Width = 600;
             prompt.Height = 500;
@@ -306,7 +312,10 @@ namespace WinFormsApp3
             string[] suffixes = { "B", "KB", "MB", "GB", "TB" };
             int counter = 0;
             decimal number = bytes;
-            while (Math.Round(number / 1024) >= 1) { number /= 1024; counter++; }
+            while (Math.Round(number / 1024) >= 1)
+            {
+                number /= 1024; counter++;
+            }
             return string.Format("{0:n1} {1}", number, suffixes[counter]);
         }
     }

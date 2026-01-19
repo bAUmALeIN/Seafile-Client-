@@ -18,7 +18,7 @@
             public const string DeleteToken = "DELETE FROM Settings WHERE Key = 'api_token';";
         }
 
-        // JavaScript Scripte
+        // JavaScript
         public static class Scripts
         {
             public const string SeafileAutoClicker = @"

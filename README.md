@@ -17,7 +17,11 @@
 <br>
 
 > [!NOTE]  
-> **Status: Version 1.0 (Public Beta)** > Dies ist das erste öffentliche Release. Es können noch Bugs oder unerwartete Fehler auftreten.  
+>* **Dieses Projekt dient ausschließlich zu Lern- und Analysezwecken im Kontext von Client-Server-Authentifizierung.
+>*Es ist nicht für den produktiven Einsatz oder zur Umgehung administrativer Richtlinien gedacht**.**
+
+>[!NOTE]
+> **Status: Version 1.0 (Public Beta)** > Dies ist das erste Release. Es können noch Bugs oder unerwartete Fehler auftreten.  
 > Da ich dieses Projekt **neben der Abendschule** entwickle, bitte ich um etwas Geduld bei Fixes. Ich versuche aber, gemeldete Probleme so zeitnah wie möglich zu beheben!
 
 <br>
