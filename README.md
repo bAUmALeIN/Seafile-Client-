@@ -1,7 +1,7 @@
 # Seafile Client - BBS Me Hannover (Unofficial)
 
 <div align="center">
-  <img src="Ressources/app_logo.png" alt="Seafile Client Logo" width="150">
+  <img src="Resources/app_logo.png" alt="Seafile Client Logo" width="150">
   <br>
   <b>Ein angepasster Seafile-Desktop-Client für die BBS Me Hannover.</b>
   <br>
