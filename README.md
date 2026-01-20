@@ -21,7 +21,7 @@
 >*Es ist nicht für den produktiven Einsatz oder zur Umgehung administrativer Richtlinien gedacht**.**
 
 >[!NOTE]
-> **Status: Version 1.2.1 (Public Beta)** > Dies ist das erste Release (V1.x.x). Es können noch Bugs oder unerwartete Fehler auftreten.  
+> **Status: Version 1.5.0 (Public Beta)** > Dies ist das erste Release (V1.x.x). Es können noch Bugs oder unerwartete Fehler auftreten.  
 > Da ich dieses Projekt **neben der Abendschule** entwickle, bitte ich um etwas Geduld bei Fixes. Ich versuche aber, gemeldete Probleme so zeitnah wie möglich zu beheben!
 
 <br>
