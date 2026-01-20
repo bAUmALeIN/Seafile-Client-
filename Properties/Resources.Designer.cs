@@ -193,6 +193,26 @@ namespace WinFormsApp3.Properties {
         /// <summary>
         ///   Sucht eine lokalisierte Ressource vom Typ System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap icon_refresh {
+            get {
+                object obj = ResourceManager.GetObject("icon_refresh", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Sucht eine lokalisierte Ressource vom Typ System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap icon_rename {
+            get {
+                object obj = ResourceManager.GetObject("icon_rename", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Sucht eine lokalisierte Ressource vom Typ System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap icon_repo {
             get {
                 object obj = ResourceManager.GetObject("icon_repo", resourceCulture);
@@ -216,6 +236,16 @@ namespace WinFormsApp3.Properties {
         internal static System.Drawing.Bitmap icon_settings {
             get {
                 object obj = ResourceManager.GetObject("icon_settings", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Sucht eine lokalisierte Ressource vom Typ System.Drawing.Bitmap.
+        /// </summary>
+        internal static System.Drawing.Bitmap icon_share {
+            get {
+                object obj = ResourceManager.GetObject("icon_share", resourceCulture);
                 return ((System.Drawing.Bitmap)(obj));
             }
         }

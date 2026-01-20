@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using WinFormsApp3.Data;
+using System.IO;
 
 namespace WinFormsApp3
 {
@@ -23,10 +24,6 @@ namespace WinFormsApp3
         private CancellationTokenSource _thumbnailCts;
         private System.Windows.Forms.Timer _refreshDebounceTimer;
         private Cursor _dragCursor = null;
-
-        // V1.4 Variables: Sortier-Status merken
-        private int _sortColumn = -1;
-        private bool _sortAscending = true;
 
         public Form1(string token)
         {
@@ -45,8 +42,22 @@ namespace WinFormsApp3
             _cacheManager = new CacheManager();
             _seafileClient = new SeafileClient(_authToken);
             _downloadManager = new DownloadManager(_seafileClient);
+
+            // UI Events verbinden
             _downloadManager.OnDownloadStarted += AddDownloadToUi;
             _downloadManager.OnItemUpdated += UpdateDownloadInUi;
+
+            // NEU: Wenn ein Transfer fertig ist (finally block), Timer für Refresh starten
+            _downloadManager.OnTransferFinished += () =>
+            {
+                // Wir nutzen Invoke, da das Event aus einem Background-Thread kommen kann
+                this.Invoke(new Action(() =>
+                {
+                    // Timer neustarten (Debounce), damit wir nicht spammen
+                    _refreshDebounceTimer.Stop();
+                    _refreshDebounceTimer.Start();
+                }));
+            };
         }
 
         private void SetupRefreshTimer()
@@ -100,6 +111,7 @@ namespace WinFormsApp3
                 lstRepos.Items.Clear();
                 lstRepos.Groups.Clear();
                 lstRepos.ShowGroups = true;
+
                 string cacheKey = _navState.IsInRoot ? "root" : $"{_navState.CurrentRepoId}:{_navState.CurrentPath}";
                 var cachedEntries = _cacheManager.Get<List<object>>(cacheKey);
 
@@ -144,6 +156,7 @@ namespace WinFormsApp3
             ListViewGroup grpShared = new ListViewGroup("   FÜR MICH FREIGEGEBEN", HorizontalAlignment.Left);
             lstRepos.Groups.Add(grpMine);
             lstRepos.Groups.Add(grpShared);
+
             foreach (var repo in repos)
             {
                 var item = new ListViewItem(repo.name, "repo");
@@ -152,6 +165,7 @@ namespace WinFormsApp3
                 string ownerDisplay = repo.type == "grepo" ? "Gruppe" : (repo.owner ?? "-");
                 item.SubItems.Add(ownerDisplay);
                 item.Tag = repo;
+
                 if (repo.type == "repo") item.Group = grpMine;
                 else if (repo.type == "srepo") item.Group = grpShared;
                 else if (repo.type == "grepo")
@@ -166,6 +180,7 @@ namespace WinFormsApp3
                     item.Group = targetGroup;
                 }
                 else item.Group = grpShared;
+
                 lstRepos.Items.Add(item);
             }
         }
@@ -175,6 +190,7 @@ namespace WinFormsApp3
             lstRepos.ShowGroups = false;
             var backItem = new ListViewItem(".. [Zurück]", "back") { Tag = new SeafileEntry { type = "back" } };
             lstRepos.Items.Add(backItem);
+
             foreach (var entry in entries)
             {
                 string iconKey = "file";
@@ -211,8 +227,10 @@ namespace WinFormsApp3
                 string ext = System.IO.Path.GetExtension(entry.name).ToLower();
                 if (new[] { ".jpg", ".png", ".jpeg", ".gif" }.Contains(ext))
                 {
-                    string fullPath = path.EndsWith("/") ? path + entry.name : path + "/" + entry.name;
+                    string fullPath = path.EndsWith("/") ?
+                        path + entry.name : path + "/" + entry.name;
                     Image thumb = await _seafileClient.GetThumbnailAsync(repoId, fullPath, 48);
+
                     if (thumb != null && !token.IsCancellationRequested)
                     {
                         this.Invoke(new Action(() => {
@@ -245,7 +263,8 @@ namespace WinFormsApp3
                     string folderName = UiHelper.ShowInputDialog("Neuer Ordner", "Name:");
                     if (!string.IsNullOrWhiteSpace(folderName))
                     {
-                        string newPath = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + folderName : _navState.CurrentPath + "/" + folderName;
+                        string newPath = _navState.CurrentPath.EndsWith("/") ?
+                            _navState.CurrentPath + folderName : _navState.CurrentPath + "/" + folderName;
                         bool success = await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newPath);
                         if (success)
                         {
@@ -264,6 +283,7 @@ namespace WinFormsApp3
         private async void BtnDelete_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count == 0) return;
+
             string message = lstRepos.SelectedItems.Count == 1 ? GetDeleteMessage(lstRepos.SelectedItems[0].Tag) : $"Möchten Sie wirklich {lstRepos.SelectedItems.Count} Elemente unwiderruflich löschen?";
             if (!UiHelper.ShowDangerConfirmation("LÖSCHEN BESTÄTIGEN", message)) return;
 
@@ -289,7 +309,8 @@ namespace WinFormsApp3
 
         private string GetDeleteMessage(object tag)
         {
-            if (tag is SeafileEntry entry) return entry.type == "back" ? "" : $"Möchten Sie '{entry.name}' wirklich löschen?";
+            if (tag is SeafileEntry entry) return entry.type == "back" ?
+                "" : $"Möchten Sie '{entry.name}' wirklich löschen?";
             if (tag is SeafileRepo repo) return $"Möchten Sie die Bibliothek '{repo.name}' wirklich löschen?";
             return "Löschen?";
         }
@@ -306,28 +327,11 @@ namespace WinFormsApp3
             return false;
         }
 
-        // --- HANDLER FÜR SUCHE (ENTER KEY) ---
-        private async void TxtSearch_KeyDown(object sender, KeyEventArgs e)
+        private async void btnSearch_Click(object sender, EventArgs e)
         {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.SuppressKeyPress = true; // "Ping" verhindern
-                string term = _txtSearch.Text.Trim();
+            string searchTerm = UiHelper.ShowInputDialog("Globale Suche", "Suchbegriff:");
+            if (string.IsNullOrWhiteSpace(searchTerm)) { await LadeInhalt(); return; }
 
-                if (string.IsNullOrWhiteSpace(term))
-                {
-                    await LadeInhalt();
-                    return;
-                }
-                PerformSearch(term);
-            }
-        }
-
-        // Dummy für alte Referenzen, kann ignoriert werden
-        private void btnSearch_Click(object sender, EventArgs e) { }
-
-        private async void PerformSearch(string searchTerm)
-        {
             lstRepos.Visible = false;
             lstRepos.Items.Clear(); lstRepos.Groups.Clear(); lstRepos.ShowGroups = true;
             try
@@ -347,6 +351,7 @@ namespace WinFormsApp3
                         {
                             var entries = await _seafileClient.GetAllFilesRecursiveAsync(repo.id);
                             var matches = entries.Where(x => x.name.ToLower().Contains(searchTerm.ToLower())).ToList();
+
                             if (matches.Count > 0)
                             {
                                 var grp = new ListViewGroup(repo.name, HorizontalAlignment.Left);
@@ -440,7 +445,109 @@ namespace WinFormsApp3
                 }
         }
 
-        // --- HANDLER FÜR RENAME ---
+        private async void CtxPreview_Click(object sender, EventArgs e)
+        {
+            if (lstRepos.SelectedItems.Count != 1) return;
+            if (!(lstRepos.SelectedItems[0].Tag is SeafileEntry entry) || entry.type == "dir" || entry.type == "back") return;
+
+            await OpenPreview(entry);
+        }
+
+        private void CtxShare_Click(object sender, EventArgs e)
+        {
+            if (lstRepos.SelectedItems.Count != 1) return; // Nur Einzel-Freigabe supporten
+
+            var tag = lstRepos.SelectedItems[0].Tag;
+            string repoId = _navState.CurrentRepoId;
+            string path = "";
+            string name = lstRepos.SelectedItems[0].Text;
+            bool isDir = false;
+
+            if (tag is SeafileEntry entry)
+            {
+                if (entry.type == "back") return;
+
+                path = _navState.CurrentPath.EndsWith("/")
+                    ? _navState.CurrentPath + entry.name
+                    : _navState.CurrentPath + "/" + entry.name;
+                isDir = (entry.type == "dir");
+            }
+            else if (tag is SeafileRepo repo)
+            {
+                // Ganze Bibliothek freigeben (Technisch gesehen Root-Ordner "/")
+                repoId = repo.id;
+                path = "/";
+                isDir = true;
+                name = repo.name;
+            }
+            else
+            {
+                return;
+            }
+
+            // Form öffnen
+            try
+            {
+                // path muss bereinigt werden (keine doppelten Slashes)
+                path = path.Replace("//", "/");
+                new FrmShare(_seafileClient, repoId, path, name, isDir).ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                UiHelper.ShowErrorDialog("Fehler", ex.Message);
+            }
+        }
+
+        private async Task OpenPreview(SeafileEntry entry)
+        {
+            try
+            {
+                lblStatus.Text = $"Öffne Vorschau für {entry.name}...";
+                string ext = Path.GetExtension(entry.name).ToLower();
+
+                bool useServerViewer = new HashSet<string> { ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".csv" }.Contains(ext);
+
+                if (useServerViewer)
+                {
+                    string baseUrl = AppConfig.ApiBaseUrl.Replace("api2/", "").TrimEnd('/');
+                    string fullPath = _navState.CurrentPath.EndsWith("/")
+                        ? _navState.CurrentPath + entry.name
+                        : _navState.CurrentPath + "/" + entry.name;
+
+                    string encodedPath = string.Join("/", fullPath.Split('/').Select(Uri.EscapeDataString));
+                    string webViewUrl = $"{baseUrl}/lib/{_navState.CurrentRepoId}/file{encodedPath}";
+
+                    new FrmPreview(webViewUrl, entry.name, true).Show();
+                    lblStatus.Text = "Online-Vorschau geöffnet.";
+                }
+                else
+                {
+                    string tempFile = Path.Combine(Path.GetTempPath(), entry.name);
+                    if (!System.IO.File.Exists(tempFile) || new FileInfo(tempFile).Length != entry.size)
+                    {
+                        string fullPath = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + entry.name : _navState.CurrentPath + "/" + entry.name;
+                        string link = await _seafileClient.GetDownloadLinkAsync(_navState.CurrentRepoId, fullPath);
+                        using (var client = new System.Net.Http.HttpClient())
+                        {
+                            var bytes = await client.GetByteArrayAsync(link);
+                            await System.IO.File.WriteAllBytesAsync(tempFile, bytes);
+                        }
+                    }
+                    new FrmPreview(tempFile, entry.name, false).Show();
+                    lblStatus.Text = "Lokale Vorschau bereit.";
+                }
+            }
+            catch (Exception ex)
+            {
+                UiHelper.ShowErrorDialog("Vorschau Fehler", ex.Message);
+            }
+            finally
+            {
+                await Task.Delay(3000);
+                lblStatus.Text = $"{_navState.CurrentRepoName}: {_navState.CurrentPath}";
+            }
+        }
+
         private async void CtxRename_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count != 1) return;
@@ -497,6 +604,7 @@ namespace WinFormsApp3
                     entryToDownload = tuple.Item2; navPath = entryToDownload.parent_dir ?? "/";
                 }
                 else if (tag is SeafileEntry entry) entryToDownload = entry;
+
                 if (entryToDownload != null && entryToDownload.type != "back")
                 {
                     _ = _downloadManager.DownloadEntryAsync(entryToDownload, repoId, navPath);
@@ -513,6 +621,24 @@ namespace WinFormsApp3
                 var firstTag = lstRepos.SelectedItems[0].Tag;
                 ToolStripItem itemJump = cms.Items["ItemJump"];
                 if (itemJump != null) itemJump.Visible = firstTag is Tuple<string, SeafileEntry>;
+
+                ToolStripItem itemPreview = cms.Items["ItemPreview"];
+                if (itemPreview != null)
+                {
+                    itemPreview.Visible = false;
+                    if (lstRepos.SelectedItems.Count == 1 && firstTag is SeafileEntry entry && entry.type != "dir" && entry.type != "back")
+                    {
+                        string ext = System.IO.Path.GetExtension(entry.name).ToLower();
+                        var supportedExtensions = new HashSet<string>
+                        {
+                            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg",
+                            ".txt", ".md", ".cs", ".json", ".xml", ".html", ".js", ".css", ".log",
+                            ".mp4", ".webm", ".mp3", ".wav",
+                            ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".csv"
+                        };
+                        if (supportedExtensions.Contains(ext)) itemPreview.Visible = true;
+                    }
+                }
             }
             else if (lstRepos.SelectedItems.Count == 0) e.Cancel = true;
         }
@@ -542,7 +668,9 @@ namespace WinFormsApp3
             }
         }
 
-        // --- HANDLER FÜR SORTIEREN ---
+        private int _sortColumn = -1;
+        private bool _sortAscending = true;
+
         private void LstRepos_ColumnClick(object sender, ColumnClickEventArgs e)
         {
             if (e.Column != _sortColumn)
@@ -559,7 +687,6 @@ namespace WinFormsApp3
             lstRepos.Sort();
         }
 
-        // --- HANDLER FÜR TRANSFER MENU (Clear List / Show in Folder) ---
         private void SetupTransferContextMenu()
         {
             ContextMenuStrip ctxTransfer = new ContextMenuStrip();
@@ -608,11 +735,13 @@ namespace WinFormsApp3
             ListViewItem targetItem = lstRepos.GetItemAt(cp.X, cp.Y);
             int hoverIndex = (targetItem != null) ? targetItem.Index : -1;
             int currentIndex = (lstRepos.Tag is int val) ? val : -1;
+
             if (currentIndex != hoverIndex)
             {
                 lstRepos.Tag = hoverIndex;
                 lstRepos.Invalidate();
             }
+
             if (e.Data.GetDataPresent(typeof(ListViewItem))) e.Effect = DragDropEffects.Move;
             else if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy;
             else e.Effect = DragDropEffects.None;
@@ -639,13 +768,19 @@ namespace WinFormsApp3
             Bitmap bmp = new Bitmap(300, 40);
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                using (SolidBrush bg = new SolidBrush(Color.FromArgb(100, 50, 50, 50))) { g.FillRectangle(bg, 0, 0, 300, 40); }
+                using (SolidBrush bg = new SolidBrush(Color.FromArgb(100, 50, 50, 50)))
+                {
+                    g.FillRectangle(bg, 0, 0, 300, 40);
+                }
                 if (item.ImageList != null && !string.IsNullOrEmpty(item.ImageKey))
                 {
                     Image icon = item.ImageList.Images[item.ImageKey];
                     g.DrawImage(icon, 5, 5, 32, 32);
                 }
-                using (Font f = new Font("Segoe UI", 10, FontStyle.Bold)) { g.DrawString(item.Text, f, Brushes.White, 40, 10); }
+                using (Font f = new Font("Segoe UI", 10, FontStyle.Bold))
+                {
+                    g.DrawString(item.Text, f, Brushes.White, 40, 10);
+                }
                 g.DrawRectangle(Pens.Orange, 0, 0, 299, 39);
             }
             return new Cursor(bmp.GetHicon());
@@ -665,16 +800,48 @@ namespace WinFormsApp3
             lstRepos.Tag = -1;
             lstRepos.Invalidate();
 
+            Point cp = lstRepos.PointToClient(new Point(e.X, e.Y));
+            ListViewItem targetItem = lstRepos.GetItemAt(cp.X, cp.Y);
+
+            string uploadTargetDir = _navState.CurrentPath;
+
+            if (targetItem != null && targetItem.Tag is SeafileEntry entry && entry.type == "dir")
+            {
+                uploadTargetDir = uploadTargetDir.EndsWith("/")
+                    ? uploadTargetDir + entry.name
+                    : uploadTargetDir + "/" + entry.name;
+            }
+
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                if (_navState.IsInRoot) { UiHelper.ShowInfoDialog("Info", "Bitte öffne erst eine Bibliothek."); return; }
+                if (_navState.IsInRoot && targetItem == null)
+                {
+                    UiHelper.ShowInfoDialog("Info", "Bitte öffne erst eine Bibliothek oder ziehe die Dateien auf einen Ordner.");
+                    return;
+                }
+
+                if (_navState.IsInRoot && targetItem != null && targetItem.Tag is SeafileRepo repo)
+                {
+                    try
+                    {
+                        string[] files = (string[])e.Data.GetData(DataFormats.FileDrop);
+                        _ = _downloadManager.UploadFilesAsync(files, repo.id, "/");
+                        new MaterialSnackBar($"Upload in Bibliothek '{repo.name}' gestartet!", "OK", true).Show(this);
+                    }
+                    catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); }
+                    return;
+                }
+
                 string[] droppedPaths = (string[])e.Data.GetData(DataFormats.FileDrop);
                 if (droppedPaths != null && droppedPaths.Length > 0)
                 {
                     try
                     {
-                        _ = _downloadManager.UploadFilesAsync(droppedPaths, _navState.CurrentRepoId, _navState.CurrentPath);
-                        new MaterialSnackBar("Upload gestartet!", "OK", true).Show(this);
+                        _ = _downloadManager.UploadFilesAsync(droppedPaths, _navState.CurrentRepoId, uploadTargetDir);
+                        string msg = uploadTargetDir == _navState.CurrentPath
+                            ? "Upload gestartet!"
+                            : $"Upload in '{Path.GetFileName(uploadTargetDir)}' gestartet!";
+                        new MaterialSnackBar(msg, "OK", true).Show(this);
                     }
                     catch (Exception ex) { UiHelper.ShowScrollableErrorDialog("Upload Fehler", ex.Message); }
                 }
@@ -686,10 +853,10 @@ namespace WinFormsApp3
                 var srcItem = (ListViewItem)e.Data.GetData(typeof(ListViewItem));
                 if (srcItem.Tag is SeafileRepo) { UiHelper.ShowInfoDialog("Nicht möglich", "Bibliotheken können nicht verschoben werden."); return; }
                 if (!(srcItem.Tag is SeafileEntry srcEntry)) return;
-                Point cp = lstRepos.PointToClient(new Point(e.X, e.Y));
-                ListViewItem targetItem = lstRepos.GetItemAt(cp.X, cp.Y);
+
                 if (targetItem == null) return;
                 if (!(targetItem.Tag is SeafileEntry targetEntry)) return;
+
                 if (targetEntry.type != "dir" && targetEntry.type != "back") return;
                 if (srcEntry.id == targetEntry.id) return;
 
@@ -714,6 +881,7 @@ namespace WinFormsApp3
 
                 string typeLabel = srcEntry.type == "dir" ? "den Ordner" : "die Datei";
                 if (!UiHelper.ShowConfirmationDialog("Verschieben", $"Möchtest du {typeLabel} '{srcEntry.name}' in {targetNameDisplay} verschieben?")) return;
+
                 try
                 {
                     lblStatus.Text = "Verschiebe...";
@@ -746,6 +914,13 @@ namespace WinFormsApp3
             }
         }
 
+        private async void BtnRefresh_Click(object sender, EventArgs e)
+        {
+            _cacheManager.Clear();
+            await LadeInhalt();
+            new MaterialSnackBar("Aktualisiert.", 1000).Show(this);
+        }
+
         private void btnLogout_Click(object sender, EventArgs e)
         {
             if (UiHelper.ShowConfirmationDialog("Abmelden", "Möchtest du dich wirklich abmelden?"))
@@ -758,13 +933,40 @@ namespace WinFormsApp3
         private void AddDownloadToUi(DownloadItem item)
         {
             if (this.InvokeRequired) { this.Invoke(new Action<DownloadItem>(AddDownloadToUi), item); return; }
+
             string cleanName = item.FileName.Replace("⬇", "").Replace("⬆", "").Trim();
             var lvi = new ListViewItem(cleanName);
             lvi.SubItems.Add(item.Status);
             lvi.SubItems.Add("-");
             lvi.SubItems.Add(item.Progress + "%");
             lvi.SubItems.Add(item.StartTime.ToShortTimeString());
-            lvi.ImageKey = item.Type == "Upload" ? "upload" : "download";
+
+            // NEU: Dynamische Icons
+            if (item.Type == "Ordner Upload")
+            {
+                lvi.ImageKey = "dir";
+            }
+            else if (item.Type == "Upload")
+            {
+                string ext = Path.GetExtension(cleanName).ToLower();
+                var imageList = _lstDownloads.SmallImageList;
+
+                if (imageList != null)
+                {
+                    if (!imageList.Images.ContainsKey(ext))
+                    {
+                        Icon sysIcon = IconHelper.GetIconForExtension(ext, false);
+                        if (sysIcon != null) imageList.Images.Add(ext, sysIcon);
+                        else imageList.Images.Add(ext, Properties.Resources.icon_file);
+                    }
+                    lvi.ImageKey = ext;
+                }
+            }
+            else
+            {
+                lvi.ImageKey = "download"; // Fallback für Downloads
+            }
+
             lvi.Tag = item; item.Tag = lvi;
             _lstDownloads.Items.Add(lvi);
             ResizeDownloadListColumns();
@@ -778,16 +980,106 @@ namespace WinFormsApp3
                 lvi.SubItems[1].Text = item.Status;
                 lvi.SubItems[2].Text = item.SpeedString;
                 lvi.SubItems[3].Text = item.Progress + "%";
-                if (item.Status == "Fertig") { lvi.ForeColor = Color.LightGreen; lvi.ImageKey = "ok"; }
-                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen") { lvi.ForeColor = Color.Salmon; lvi.ImageKey = "error"; }
-                else { lvi.ForeColor = Color.White; lvi.ImageKey = item.Type == "Upload" ? "upload" : "download"; }
+
+                if (item.Status == "Fertig")
+                {
+                    lvi.ForeColor = Color.LightGreen;
+
+                    // ICON-LOGIK FIX:
+                    // Nur bei Downloads oder Ordnern den Haken setzen.
+                    // Bei Einzeldateien wollen wir das Icon (PDF, Word etc.) behalten!
+                    if (item.Type == "Batch Download" || item.Type.Contains("Bibliothek") || item.Type == "Ordner Upload")
+                    {
+                        lvi.ImageKey = "ok";
+                    }
+                    // Ansonsten: Icon beibehalten (es ist ja schon das richtige)
+                }
+                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen")
+                {
+                    lvi.ForeColor = Color.Salmon;
+                    lvi.ImageKey = "error";
+                }
             }
-            if (item.Status == "Fertig" && item.Type == "Upload" && _refreshDebounceTimer != null) { _refreshDebounceTimer.Stop(); _refreshDebounceTimer.Start(); }
+            if (item.Status == "Fertig" && item.Type.Contains("Upload") && _refreshDebounceTimer != null) { _refreshDebounceTimer.Stop(); _refreshDebounceTimer.Start(); }
         }
 
         private void _lstDownloads_DoubleClick(object sender, EventArgs e)
         {
             if (_lstDownloads.SelectedItems.Count > 0 && _lstDownloads.SelectedItems[0].Tag is DownloadItem item) new FrmTransferDetail(item).ShowDialog();
+        }
+
+        private async void TxtSearch_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true;
+                string term = _txtSearch.Text.Trim();
+                if (string.IsNullOrWhiteSpace(term))
+                {
+                    await LadeInhalt();
+                    return;
+                }
+                PerformSearch(term);
+            }
+        }
+
+        private async void PerformSearch(string searchTerm)
+        {
+            lstRepos.Visible = false;
+            lstRepos.Items.Clear(); lstRepos.Groups.Clear(); lstRepos.ShowGroups = true;
+            try
+            {
+                lblStatus.Text = "Suche läuft...";
+                UpdateBreadcrumbs("Suche: " + searchTerm);
+                var allRepos = await _seafileClient.GetLibrariesAsync();
+                var searchResults = new ConcurrentBag<ListViewItem>();
+                var groups = new ConcurrentDictionary<string, ListViewGroup>();
+                var searchTasks = new List<Task>();
+
+                foreach (var repo in allRepos)
+                {
+                    searchTasks.Add(Task.Run(async () =>
+                    {
+                        try
+                        {
+                            var entries = await _seafileClient.GetAllFilesRecursiveAsync(repo.id);
+                            var matches = entries.Where(x => x.name.ToLower().Contains(searchTerm.ToLower())).ToList();
+                            if (matches.Count > 0)
+                            {
+                                var grp = new ListViewGroup(repo.name, HorizontalAlignment.Left);
+                                groups.TryAdd(repo.id, grp);
+                                foreach (var entry in matches)
+                                {
+                                    string path = (entry.parent_dir ?? "/") + entry.name;
+                                    path = path.Replace("//", "/");
+                                    var item = new ListViewItem($"[{repo.name}] {path}", entry.type == "dir" ? "dir" : "file");
+                                    item.SubItems.Add(entry.type == "dir" ? "-" : UiHelper.FormatByteSize(entry.size));
+                                    item.SubItems.Add(FormatDate(entry.mtime));
+                                    item.SubItems.Add(entry.type);
+                                    item.Tag = new Tuple<string, SeafileEntry>(repo.id, entry);
+                                    item.Group = grp;
+                                    searchResults.Add(item);
+                                }
+                            }
+                        }
+                        catch { }
+                    }));
+                }
+                await Task.WhenAll(searchTasks);
+                lstRepos.BeginUpdate();
+                lstRepos.Groups.AddRange(groups.Values.OrderBy(g => g.Header).ToArray());
+                lstRepos.Items.AddRange(searchResults.ToArray());
+            }
+            catch (Exception ex)
+            {
+                UiHelper.ShowErrorDialog("Fehler", ex.Message);
+            }
+            finally
+            {
+                lstRepos.EndUpdate();
+                lstRepos.Visible = true;
+                lblStatus.Text = "Suche beendet."; UiHelper.UpdateColumnWidths(lstRepos);
+            }
         }
 
         private string FormatDate(long timestamp) => timestamp == 0 ? "-" : DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime().ToString("g");

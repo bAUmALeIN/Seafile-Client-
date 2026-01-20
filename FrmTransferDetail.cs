@@ -6,6 +6,7 @@ using ReaLTaiizor.Util;
 using System;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Windows.Forms;
 using WinFormsApp3.Data;
 
@@ -16,46 +17,39 @@ namespace WinFormsApp3
         private readonly DownloadItem _item;
 
         // UI Controls
-        private Label lblValType, lblValStatus, lblValRate, lblValProgress, lblValStart, lblMsg;
+        private Label lblValType, lblValStatus, lblValRate, lblValProgress, lblValStart, lblMsg, lblValRemotePath;
         private PictureBox picStatus;
         private Label lblHeader;
+        private System.Windows.Forms.ListView _lstDetails;
+        private ImageList _detailIcons; // NEU: Speicher für die Icons
 
         // Logic
         private System.Windows.Forms.Timer _animTimer;
         private System.Windows.Forms.Timer _refreshTimer;
         private float _currentAngle = 0f;
         private Image _loadingImageOriginal;
-
-        // Theme Backup
         private MaterialColorScheme _defaultScheme;
 
         public FrmTransferDetail(DownloadItem item)
         {
             _item = item;
-
-            // Theme sichern
             _defaultScheme = MaterialSkinManager.Instance.ColorScheme;
 
             InitializeComponent();
             InitializeStaticLayout();
 
             SetupAnimation();
-
-            // Timer starten (200ms = 5 FPS für Text-Updates reicht völlig)
-            _refreshTimer = new System.Windows.Forms.Timer { Interval = 200 };
+            _refreshTimer = new System.Windows.Forms.Timer { Interval = 500 };
             _refreshTimer.Tick += (s, e) => UpdateUI();
             _refreshTimer.Start();
 
-            // Erstes Update sofort erzwingen
             UpdateUI();
-
             this.FormClosing += FrmTransferDetail_FormClosing;
         }
 
         private void FrmTransferDetail_FormClosing(object sender, FormClosingEventArgs e)
         {
             StopAllTimers();
-            // Theme zurücksetzen beim Schließen
             MaterialSkinManager.Instance.ColorScheme = _defaultScheme;
         }
 
@@ -67,26 +61,26 @@ namespace WinFormsApp3
 
         private void InitializeComponent()
         {
-            this.Size = new Size(550, 550);
+            this.Size = new Size(600, 700);
             this.Sizable = false;
             this.StartPosition = FormStartPosition.CenterParent;
             this.Text = "Transfer Details";
 
             picStatus = new PictureBox();
-            picStatus.Size = new Size(100, 100);
+            picStatus.Size = new Size(80, 80);
             picStatus.SizeMode = PictureBoxSizeMode.CenterImage;
             picStatus.Location = new Point((this.ClientSize.Width - picStatus.Width) / 2, 80);
             picStatus.BackColor = Color.Transparent;
             this.Controls.Add(picStatus);
 
             lblHeader = new Label();
-            lblHeader.Font = new Font("Segoe UI", 14f, FontStyle.Bold);
+            lblHeader.Font = new Font("Segoe UI", 12f, FontStyle.Bold);
             lblHeader.ForeColor = Color.White;
             lblHeader.BackColor = Color.Transparent;
             lblHeader.AutoSize = false;
             lblHeader.TextAlign = ContentAlignment.MiddleCenter;
-            lblHeader.Size = new Size(500, 30);
-            lblHeader.Location = new Point(25, picStatus.Bottom + 15);
+            lblHeader.Size = new Size(550, 30);
+            lblHeader.Location = new Point(25, picStatus.Bottom + 10);
             this.Controls.Add(lblHeader);
 
             MaterialButton btnClose = new MaterialButton();
@@ -95,7 +89,7 @@ namespace WinFormsApp3
             btnClose.UseAccentColor = false;
             btnClose.AutoSize = false;
             btnClose.Size = new Size(130, 36);
-            btnClose.Location = new Point(390, 480);
+            btnClose.Location = new Point(440, 640);
             btnClose.Click += (s, e) => this.Close();
             this.Controls.Add(btnClose);
 
@@ -104,7 +98,7 @@ namespace WinFormsApp3
             btnCopy.Type = MaterialButton.MaterialButtonType.Outlined;
             btnCopy.AutoSize = false;
             btnCopy.Size = new Size(130, 36);
-            btnCopy.Location = new Point(250, 480);
+            btnCopy.Location = new Point(300, 640);
             btnCopy.Click += BtnCopy_Click;
             this.Controls.Add(btnCopy);
         }
@@ -113,8 +107,8 @@ namespace WinFormsApp3
         {
             FlowLayoutPanel flowContent = new FlowLayoutPanel();
             flowContent.BackColor = Color.FromArgb(45, 45, 48);
-            flowContent.Location = new Point(30, lblHeader.Bottom + 20);
-            flowContent.Size = new Size(490, 220);
+            flowContent.Location = new Point(30, lblHeader.Bottom + 10);
+            flowContent.Size = new Size(540, 200);
             flowContent.FlowDirection = FlowDirection.TopDown;
             flowContent.WrapContents = false;
             flowContent.AutoScroll = true;
@@ -128,6 +122,7 @@ namespace WinFormsApp3
             tlp.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
             lblValType = AddGridRow(tlp, "Typ", Color.White);
+            lblValRemotePath = AddGridRow(tlp, "Server Pfad", Color.Orange);
             lblValStatus = AddGridRow(tlp, "Status", Color.White);
             lblValRate = AddGridRow(tlp, "Rate", Color.Cyan);
             lblValProgress = AddGridRow(tlp, "Progress", Color.White);
@@ -135,80 +130,138 @@ namespace WinFormsApp3
 
             flowContent.Controls.Add(tlp);
 
-            System.Windows.Forms.Panel line = new System.Windows.Forms.Panel();
-            line.Height = 1; line.BackColor = Color.Gray;
-            line.Width = flowContent.ClientSize.Width - 40;
-            line.Margin = new Padding(0, 15, 0, 15);
-            flowContent.Controls.Add(line);
-
             lblMsg = new Label();
             lblMsg.AutoSize = true;
-            lblMsg.MaximumSize = new Size(flowContent.ClientSize.Width - 30, 0);
-            lblMsg.Font = new Font("Consolas", 10F);
-            lblMsg.Text = "Initialisiere...";
+            lblMsg.Margin = new Padding(0, 10, 0, 0);
+            lblMsg.Font = new Font("Consolas", 9F);
+            lblMsg.ForeColor = Color.LightGray;
             flowContent.Controls.Add(lblMsg);
+
+            if (_item.SubItems != null && _item.SubItems.Count > 0)
+            {
+                Label lblDetails = new Label
+                {
+                    Text = "Enthaltene Dateien:",
+                    ForeColor = Color.Gray,
+                    BackColor = Color.Transparent,
+                    Location = new Point(30, flowContent.Bottom + 10),
+                    AutoSize = true,
+                    Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+                };
+                this.Controls.Add(lblDetails);
+
+                // NEU: ImageList erstellen
+                _detailIcons = new ImageList();
+                _detailIcons.ColorDepth = ColorDepth.Depth32Bit;
+                _detailIcons.ImageSize = new Size(16, 16); // Kleine Icons für die Liste
+
+                _lstDetails = new System.Windows.Forms.ListView();
+                _lstDetails.Location = new Point(30, lblDetails.Bottom + 5);
+                _lstDetails.Size = new Size(540, 200);
+                _lstDetails.View = View.Details;
+                _lstDetails.BackColor = Color.FromArgb(40, 40, 40);
+                _lstDetails.ForeColor = Color.WhiteSmoke;
+                _lstDetails.BorderStyle = BorderStyle.FixedSingle;
+                _lstDetails.SmallImageList = _detailIcons; // NEU: Icons verknüpfen
+
+                _lstDetails.Columns.Add("Datei", 350);
+                _lstDetails.Columns.Add("Status", 150);
+                _lstDetails.HeaderStyle = ColumnHeaderStyle.Nonclickable;
+
+                _lstDetails.BeginUpdate();
+                foreach (var sub in _item.SubItems)
+                {
+                    // NEU: Icon Logik
+                    string ext = Path.GetExtension(sub.Name).ToLower();
+                    if (!_detailIcons.Images.ContainsKey(ext))
+                    {
+                        // Versuche System-Icon zu holen
+                        Icon sysIcon = IconHelper.GetIconForExtension(ext, false);
+                        if (sysIcon != null) _detailIcons.Images.Add(ext, sysIcon);
+                        else _detailIcons.Images.Add(ext, Properties.Resources.icon_file); // Fallback
+                    }
+
+                    var lvi = new ListViewItem(sub.Name);
+                    lvi.ImageKey = ext; // Icon setzen
+                    lvi.SubItems.Add(sub.Status);
+                    _lstDetails.Items.Add(lvi);
+                }
+                _lstDetails.EndUpdate();
+
+                this.Controls.Add(_lstDetails);
+            }
         }
 
         private Label AddGridRow(TableLayoutPanel tlp, string key, Color valColor)
         {
-            Label k = new Label { Text = key + ":", ForeColor = Color.Gray, Font = new Font("Segoe UI", 10F), AutoSize = true, Margin = new Padding(0, 0, 0, 5) };
-            Label v = new Label { Text = "-", ForeColor = valColor, Font = new Font("Segoe UI", 10F, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 0, 0, 5) };
+            Label k = new Label { Text = key + ":", ForeColor = Color.Gray, Font = new Font("Segoe UI", 9F), AutoSize = true, Margin = new Padding(0, 0, 0, 3) };
+            Label v = new Label { Text = "-", ForeColor = valColor, Font = new Font("Segoe UI", 9F, FontStyle.Bold), AutoSize = true, Margin = new Padding(0, 0, 0, 3) };
             tlp.RowCount++;
             tlp.Controls.Add(k, 0, tlp.RowCount - 1);
             tlp.Controls.Add(v, 1, tlp.RowCount - 1);
             return v;
         }
 
-        // --- CORE UPDATE LOGIC ---
         private void UpdateUI()
         {
-            // 1. Daten in UI schreiben
             string cleanName = _item.FileName.Replace("⬇", "").Replace("⬆", "").Trim();
-            if (lblHeader.Text != cleanName) lblHeader.Text = ShortenString(cleanName, 40);
+            if (lblHeader.Text != cleanName) lblHeader.Text = ShortenString(cleanName, 50);
 
             lblValType.Text = _item.Type;
+            lblValRemotePath.Text = _item.RemotePath ?? "-";
             lblValStatus.Text = _item.Status;
             lblValStatus.ForeColor = GetStatusColor(_item.Status);
             lblValRate.Text = _item.SpeedString;
             lblValProgress.Text = $"{_item.Progress}%";
             lblValStart.Text = _item.StartTime.ToString("T");
 
-            // 2. Status prüfen & Theme setzen
-            bool isFinished = false;
-
             if (!string.IsNullOrEmpty(_item.ErrorMessage))
             {
                 lblMsg.ForeColor = Color.Orange;
-                lblMsg.Text = "FEHLER:\n" + _item.ErrorMessage;
+                lblMsg.Text = _item.ErrorMessage;
                 UpdateStatusTheme("Error");
-                isFinished = true;
             }
             else if (_item.Status == "Fertig")
             {
                 lblMsg.ForeColor = Color.LightGreen;
-                lblMsg.Text = "Transfer erfolgreich abgeschlossen.";
+                lblMsg.Text = "Fertig.";
                 UpdateStatusTheme("Success");
-                isFinished = true;
-            }
-            else
-            {
-                lblMsg.ForeColor = Color.LightBlue;
-                lblMsg.Text = "Übertragung läuft...\nBitte das Fenster nicht schließen.";
-                // Theme für "Running" ist Standard, muss nicht gesetzt werden wenn wir im Konstruktor blau starten
-                if (!_animTimer.Enabled) _animTimer.Start();
-            }
-
-            // 3. KILL SWITCH: Wenn fertig, Timer stoppen um CPU zu sparen
-            if (isFinished)
-            {
                 StopAllTimers();
-                // Sicherstellen, dass das Icon statisch und sauber ist
+
                 if (picStatus.Image != null)
                 {
                     Bitmap transparentBitmap = new Bitmap(picStatus.Image);
                     transparentBitmap.MakeTransparent(Color.White);
                     picStatus.Image = transparentBitmap;
                 }
+            }
+            else
+            {
+                lblMsg.Text = "";
+                if (!_animTimer.Enabled) _animTimer.Start();
+            }
+
+            if (_lstDetails != null && _item.SubItems != null)
+            {
+                _lstDetails.BeginUpdate();
+                for (int i = 0; i < _item.SubItems.Count; i++)
+                {
+                    if (i < _lstDetails.Items.Count)
+                    {
+                        var sub = _item.SubItems[i];
+                        var subItem = _lstDetails.Items[i].SubItems[1];
+
+                        if (subItem.Text != sub.Status)
+                        {
+                            subItem.Text = sub.Status;
+                        }
+
+                        if (sub.Status.Contains("Fertig")) _lstDetails.Items[i].ForeColor = Color.LightGreen;
+                        else if (sub.Status.Contains("Fehler")) _lstDetails.Items[i].ForeColor = Color.Salmon;
+                        else _lstDetails.Items[i].ForeColor = Color.WhiteSmoke;
+                    }
+                }
+                _lstDetails.EndUpdate();
             }
         }
 
@@ -220,7 +273,6 @@ namespace WinFormsApp3
         }
 
         private string _lastThemeStatus = "";
-
         private void UpdateStatusTheme(string statusType)
         {
             if (_lastThemeStatus == statusType) return;
@@ -270,9 +322,9 @@ namespace WinFormsApp3
 
         private void BtnCopy_Click(object sender, EventArgs e)
         {
-            string content = $"File: {_item.FileName}\nStatus: {_item.Status}\nRate: {_item.SpeedString}\nError: {_item.ErrorMessage ?? "-"}\nID: {_item.Id}";
+            string content = $"File: {_item.FileName}\nID: {_item.Id}";
             Clipboard.SetText(content);
-            new MaterialSnackBar("In die Zwischenablage kopiert", 1500).Show(this);
+            new MaterialSnackBar("Kopiert", 1500).Show(this);
         }
 
         private string ShortenString(string text, int maxLength)
