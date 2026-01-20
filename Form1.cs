@@ -23,8 +23,6 @@ namespace WinFormsApp3
         private CacheManager _cacheManager;
         private CancellationTokenSource _thumbnailCts;
         private System.Windows.Forms.Timer _refreshDebounceTimer;
-
-        // Für Drag & Drop Visualisierung
         private Cursor _dragCursor = null;
 
         public Form1(string token)
@@ -433,53 +431,6 @@ namespace WinFormsApp3
                 }
         }
 
-        // -------------------------------------------------------------------------
-        // NEU: Preview Context Handler
-        // -------------------------------------------------------------------------
-
-        private void CtxMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
-        {
-            if (!(sender is ContextMenuStrip cms)) return;
-
-            if (lstRepos.SelectedItems.Count == 0)
-            {
-                e.Cancel = true;
-                return;
-            }
-
-            var firstTag = lstRepos.SelectedItems[0].Tag;
-            ToolStripItem itemJump = cms.Items["ItemJump"];
-            if (itemJump != null) itemJump.Visible = firstTag is Tuple<string, SeafileEntry>;
-
-            ToolStripItem itemPreview = cms.Items["ItemPreview"];
-            if (itemPreview != null)
-            {
-                itemPreview.Visible = false;
-
-                if (lstRepos.SelectedItems.Count == 1 && firstTag is SeafileEntry entry && entry.type != "dir" && entry.type != "back")
-                {
-                    string ext = System.IO.Path.GetExtension(entry.name).ToLower();
-
-                    // Liste erweitert um Office-Formate!
-                    var supportedExtensions = new HashSet<string>
-                    { 
-                        // Lokal (Browser Native)
-                        ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg",
-                        ".txt", ".md", ".cs", ".json", ".xml", ".html", ".js", ".css", ".log",
-                        ".mp4", ".webm", ".mp3", ".wav",
-                        
-                        // Server-Side (OnlyOffice Viewer)
-                        ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".odp", ".csv"
-                    };
-
-                    if (supportedExtensions.Contains(ext))
-                    {
-                        itemPreview.Visible = true;
-                    }
-                }
-            }
-        }
-
         private async void CtxPreview_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count != 1) return;
@@ -495,29 +446,23 @@ namespace WinFormsApp3
                 lblStatus.Text = $"Öffne Vorschau für {entry.name}...";
                 string ext = Path.GetExtension(entry.name).ToLower();
 
-                // WEICHE: Server-Rendering vs. Lokaler Download
                 bool useServerViewer = new HashSet<string> { ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".csv" }.Contains(ext);
 
                 if (useServerViewer)
                 {
-                    // URL Generieren: https://seafile.bbs-me.org/lib/{REPO_ID}/file/{PATH}
-                    string baseUrl = AppConfig.ApiBaseUrl.Replace("api2/", "").TrimEnd('/'); // Base URL bereinigen
+                    string baseUrl = AppConfig.ApiBaseUrl.Replace("api2/", "").TrimEnd('/');
                     string fullPath = _navState.CurrentPath.EndsWith("/")
                         ? _navState.CurrentPath + entry.name
                         : _navState.CurrentPath + "/" + entry.name;
 
-                    // URL encoden, aber Slashes behalten (Seafile ist da eigen)
                     string encodedPath = string.Join("/", fullPath.Split('/').Select(Uri.EscapeDataString));
-
                     string webViewUrl = $"{baseUrl}/lib/{_navState.CurrentRepoId}/file{encodedPath}";
 
-                    // Öffnen im Web-Modus (isWebUrl = true)
                     new FrmPreview(webViewUrl, entry.name, true).Show();
                     lblStatus.Text = "Online-Vorschau geöffnet.";
                 }
                 else
                 {
-                    // LOKALER MODUS (Bilder, PDF etc.) - wie vorher
                     string tempFile = Path.Combine(Path.GetTempPath(), entry.name);
                     if (!System.IO.File.Exists(tempFile) || new FileInfo(tempFile).Length != entry.size)
                     {
@@ -529,7 +474,6 @@ namespace WinFormsApp3
                             await System.IO.File.WriteAllBytesAsync(tempFile, bytes);
                         }
                     }
-                    // Öffnen im Lokalen Modus (isWebUrl = false)
                     new FrmPreview(tempFile, entry.name, false).Show();
                     lblStatus.Text = "Lokale Vorschau bereit.";
                 }
@@ -540,7 +484,6 @@ namespace WinFormsApp3
             }
             finally
             {
-                // Status Reset nach 3 Sekunden, damit man sieht was passiert ist
                 await Task.Delay(3000);
                 lblStatus.Text = $"{_navState.CurrentRepoName}: {_navState.CurrentPath}";
             }
@@ -612,7 +555,34 @@ namespace WinFormsApp3
             if (started) new MaterialSnackBar("Download gestartet!", "OK", true).Show(this);
         }
 
+        private void CtxMenu_Opening(object sender, System.ComponentModel.CancelEventArgs e)
+        {
+            if (sender is ContextMenuStrip cms && lstRepos.SelectedItems.Count > 0)
+            {
+                var firstTag = lstRepos.SelectedItems[0].Tag;
+                ToolStripItem itemJump = cms.Items["ItemJump"];
+                if (itemJump != null) itemJump.Visible = firstTag is Tuple<string, SeafileEntry>;
 
+                ToolStripItem itemPreview = cms.Items["ItemPreview"];
+                if (itemPreview != null)
+                {
+                    itemPreview.Visible = false;
+                    if (lstRepos.SelectedItems.Count == 1 && firstTag is SeafileEntry entry && entry.type != "dir" && entry.type != "back")
+                    {
+                        string ext = System.IO.Path.GetExtension(entry.name).ToLower();
+                        var supportedExtensions = new HashSet<string>
+                        {
+                            ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp", ".webp", ".svg",
+                            ".txt", ".md", ".cs", ".json", ".xml", ".html", ".js", ".css", ".log",
+                            ".mp4", ".webm", ".mp3", ".wav",
+                            ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".odt", ".ods", ".csv"
+                        };
+                        if (supportedExtensions.Contains(ext)) itemPreview.Visible = true;
+                    }
+                }
+            }
+            else if (lstRepos.SelectedItems.Count == 0) e.Cancel = true;
+        }
 
         private async void lstRepos_DoubleClick(object sender, EventArgs e)
         {
@@ -694,16 +664,9 @@ namespace WinFormsApp3
             _lstDownloads.ContextMenuStrip = ctxTransfer;
         }
 
-        // =========================================================================
-        // DRAG & DROP LOGIK V2 (Smart Drop)
-        // =========================================================================
-
         private void lstRepos_ItemDrag(object sender, ItemDragEventArgs e)
         {
-            if (e.Item is ListViewItem item)
-            {
-                _dragCursor = CreateDragCursorWithText(item);
-            }
+            if (e.Item is ListViewItem item) _dragCursor = CreateDragCursorWithText(item);
             lstRepos.DoDragDrop(e.Item, DragDropEffects.Move);
         }
 
@@ -783,7 +746,6 @@ namespace WinFormsApp3
 
             string uploadTargetDir = _navState.CurrentPath;
 
-            // SMART DROP LOGIK: Wenn auf Ordner gezogen -> Pfad ändern
             if (targetItem != null && targetItem.Tag is SeafileEntry entry && entry.type == "dir")
             {
                 uploadTargetDir = uploadTargetDir.EndsWith("/")
@@ -791,7 +753,6 @@ namespace WinFormsApp3
                     : uploadTargetDir + "/" + entry.name;
             }
 
-            // A) UPLOAD LOGIK
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
                 if (_navState.IsInRoot && targetItem == null)
@@ -828,7 +789,6 @@ namespace WinFormsApp3
                 return;
             }
 
-            // B) MOVE LOGIK
             if (e.Data.GetDataPresent(typeof(ListViewItem)))
             {
                 var srcItem = (ListViewItem)e.Data.GetData(typeof(ListViewItem));
@@ -895,6 +855,13 @@ namespace WinFormsApp3
             }
         }
 
+        private async void BtnRefresh_Click(object sender, EventArgs e)
+        {
+            _cacheManager.Clear();
+            await LadeInhalt();
+            new MaterialSnackBar("Aktualisiert.", 1000).Show(this);
+        }
+
         private void btnLogout_Click(object sender, EventArgs e)
         {
             if (UiHelper.ShowConfirmationDialog("Abmelden", "Möchtest du dich wirklich abmelden?"))
@@ -907,13 +874,40 @@ namespace WinFormsApp3
         private void AddDownloadToUi(DownloadItem item)
         {
             if (this.InvokeRequired) { this.Invoke(new Action<DownloadItem>(AddDownloadToUi), item); return; }
+
             string cleanName = item.FileName.Replace("⬇", "").Replace("⬆", "").Trim();
             var lvi = new ListViewItem(cleanName);
             lvi.SubItems.Add(item.Status);
             lvi.SubItems.Add("-");
             lvi.SubItems.Add(item.Progress + "%");
             lvi.SubItems.Add(item.StartTime.ToShortTimeString());
-            lvi.ImageKey = item.Type == "Upload" ? "upload" : "download";
+
+            // NEU: Dynamische Icons
+            if (item.Type == "Ordner Upload")
+            {
+                lvi.ImageKey = "dir";
+            }
+            else if (item.Type == "Upload")
+            {
+                string ext = Path.GetExtension(cleanName).ToLower();
+                var imageList = _lstDownloads.SmallImageList;
+
+                if (imageList != null)
+                {
+                    if (!imageList.Images.ContainsKey(ext))
+                    {
+                        Icon sysIcon = IconHelper.GetIconForExtension(ext, false);
+                        if (sysIcon != null) imageList.Images.Add(ext, sysIcon);
+                        else imageList.Images.Add(ext, Properties.Resources.icon_file);
+                    }
+                    lvi.ImageKey = ext;
+                }
+            }
+            else
+            {
+                lvi.ImageKey = "download"; // Fallback für Downloads
+            }
+
             lvi.Tag = item; item.Tag = lvi;
             _lstDownloads.Items.Add(lvi);
             ResizeDownloadListColumns();
@@ -927,11 +921,27 @@ namespace WinFormsApp3
                 lvi.SubItems[1].Text = item.Status;
                 lvi.SubItems[2].Text = item.SpeedString;
                 lvi.SubItems[3].Text = item.Progress + "%";
-                if (item.Status == "Fertig") { lvi.ForeColor = Color.LightGreen; lvi.ImageKey = "ok"; }
-                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen") { lvi.ForeColor = Color.Salmon; lvi.ImageKey = "error"; }
-                else { lvi.ForeColor = Color.White; lvi.ImageKey = item.Type == "Upload" ? "upload" : "download"; }
+
+                if (item.Status == "Fertig")
+                {
+                    lvi.ForeColor = Color.LightGreen;
+
+                    // ICON-LOGIK FIX:
+                    // Nur bei Downloads oder Ordnern den Haken setzen.
+                    // Bei Einzeldateien wollen wir das Icon (PDF, Word etc.) behalten!
+                    if (item.Type == "Batch Download" || item.Type.Contains("Bibliothek") || item.Type == "Ordner Upload")
+                    {
+                        lvi.ImageKey = "ok";
+                    }
+                    // Ansonsten: Icon beibehalten (es ist ja schon das richtige)
+                }
+                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen")
+                {
+                    lvi.ForeColor = Color.Salmon;
+                    lvi.ImageKey = "error";
+                }
             }
-            if (item.Status == "Fertig" && item.Type == "Upload" && _refreshDebounceTimer != null) { _refreshDebounceTimer.Stop(); _refreshDebounceTimer.Start(); }
+            if (item.Status == "Fertig" && item.Type.Contains("Upload") && _refreshDebounceTimer != null) { _refreshDebounceTimer.Stop(); _refreshDebounceTimer.Start(); }
         }
 
         private void _lstDownloads_DoubleClick(object sender, EventArgs e)

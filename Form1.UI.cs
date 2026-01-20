@@ -152,6 +152,9 @@ namespace WinFormsApp3
             downloadIcons.Images.Add("download", Properties.Resources.icon_download);
             downloadIcons.Images.Add("ok", Properties.Resources.Status_ok);
             downloadIcons.Images.Add("error", Properties.Resources.Status_error);
+            // NEU: Ordner Icon hinzufügen
+            downloadIcons.Images.Add("dir", Properties.Resources.icon_folder);
+
             _lstDownloads.SmallImageList = downloadIcons;
 
             _lstDownloads.SizeChanged += (s, e) => UiHelper.UpdateTransferColumnWidths(_lstDownloads);
@@ -170,7 +173,12 @@ namespace WinFormsApp3
             if (actionPanel == null) return;
 
             int startX = 280;
-            if (actionPanel.Controls.ContainsKey("btnDelete"))
+            if (actionPanel.Controls.ContainsKey("btnRefresh"))
+            {
+                var btnRef = actionPanel.Controls["btnRefresh"];
+                startX = btnRef.Right + 25;
+            }
+            else if (actionPanel.Controls.ContainsKey("btnDelete"))
             {
                 var btnDel = actionPanel.Controls["btnDelete"];
                 startX = btnDel.Right + 25;
@@ -206,10 +214,13 @@ namespace WinFormsApp3
             ctxMenu.Items.Insert(0, new ToolStripSeparator());
             ctxMenu.Items.Insert(0, itemJump);
 
-            // NEU: VORSCHAU KNOPF HINZUFÜGEN
-            ToolStripMenuItem itemPreview = new ToolStripMenuItem("Vorschau") { Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_search, 16, 16) };
-            itemPreview.Click += CtxPreview_Click; // Event aus Form1.cs
-            itemPreview.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+            ToolStripMenuItem itemPreview = new ToolStripMenuItem("Vorschau")
+            {
+                Name = "ItemPreview",
+                Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_search, 16, 16),
+                Font = new Font("Segoe UI", 9f, FontStyle.Bold)
+            };
+            itemPreview.Click += CtxPreview_Click;
 
             ctxMenu.Items.Insert(0, new ToolStripSeparator());
             ctxMenu.Items.Insert(0, itemPreview);
@@ -227,10 +238,8 @@ namespace WinFormsApp3
             lstRepos.DoubleClick += lstRepos_DoubleClick;
             lstRepos.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(lstRepos);
 
-            // SORTIEREN (V1.4)
             lstRepos.ColumnClick += LstRepos_ColumnClick;
 
-            // DRAG & DROP
             lstRepos.AllowDrop = true;
             lstRepos.ItemDrag += lstRepos_ItemDrag;
             lstRepos.DragEnter += LstRepos_DragEnter;
@@ -246,7 +255,6 @@ namespace WinFormsApp3
             }
             catch { }
 
-            // TRANSFER MENU
             SetupTransferContextMenu();
         }
 
@@ -265,12 +273,24 @@ namespace WinFormsApp3
 
             actionPanel.BackColor = Color.FromArgb(45, 45, 48);
 
+            // --- LOGO LOGIK (Hidden Button) ---
             if (_appIcon != null)
             {
                 _appIcon.Parent = actionPanel;
                 _appIcon.Location = new Point(10, (actionPanel.Height - _appIcon.Height) / 2);
+
+                // NEU: Hand-Cursor & Click Event
+                _appIcon.Cursor = Cursors.Hand;
+
+                // Altes Event entfernen falls vorhanden (Safety first)
+                _appIcon.Click -= AppIcon_Click;
+                _appIcon.Click += AppIcon_Click;
+
                 if (!actionPanel.Controls.Contains(_appIcon)) actionPanel.Controls.Add(_appIcon);
                 _appIcon.BringToFront();
+
+                // Tooltip für das Hidden Feature
+                if (_actionToolTip != null) _actionToolTip.SetToolTip(_appIcon, "Über & Debug Infos");
             }
 
             if (_actionToolTip == null)
@@ -287,7 +307,6 @@ namespace WinFormsApp3
             int btnY = 12;
             int rightEdge = actionPanel.Width - 10;
 
-            // RECHTS
             System.Windows.Forms.Button btnSettings = CreateFlatButton("", Properties.Resources.icon_settings);
             btnSettings.Text = "";
             btnSettings.Width = 40;
@@ -308,7 +327,6 @@ namespace WinFormsApp3
             _actionToolTip.SetToolTip(btnOut, "Abmelden");
             actionPanel.Controls.Add(btnOut);
 
-            // SEARCH CONTAINER
             System.Windows.Forms.Panel pnlSearch = new System.Windows.Forms.Panel();
             pnlSearch.Name = "pnlSearchContainer";
             pnlSearch.BackColor = Color.FromArgb(60, 60, 65);
@@ -348,7 +366,6 @@ namespace WinFormsApp3
             _actionToolTip.SetToolTip(picSearch, "Suche starten");
             actionPanel.Controls.Add(pnlSearch);
 
-            // LINKS
             System.Windows.Forms.Button btnNew = CreateFlatButton("NEU", Properties.Resources.icon_new);
             btnNew.Name = "btnNew";
             btnNew.Location = new Point(leftX, btnY);
@@ -364,6 +381,19 @@ namespace WinFormsApp3
             btnDel.Click += BtnDelete_Click;
             _actionToolTip.SetToolTip(btnDel, "Markierte Elemente löschen");
             actionPanel.Controls.Add(btnDel);
+
+            Image refreshIcon = null;
+            try { refreshIcon = Properties.Resources.icon_refresh; } catch { refreshIcon = Properties.Resources.icon_repo; }
+
+            System.Windows.Forms.Button btnRefresh = CreateFlatButton("", refreshIcon);
+            btnRefresh.Text = "";
+            btnRefresh.Width = 40;
+            btnRefresh.Name = "btnRefresh";
+            btnRefresh.Location = new Point(btnDel.Right + 10, btnY);
+            btnRefresh.Anchor = AnchorStyles.Top | AnchorStyles.Left;
+            btnRefresh.Click += BtnRefresh_Click;
+            _actionToolTip.SetToolTip(btnRefresh, "Aktualisieren");
+            actionPanel.Controls.Add(btnRefresh);
         }
 
         private System.Windows.Forms.Button CreateFlatButton(string text, Image icon)
@@ -393,6 +423,11 @@ namespace WinFormsApp3
         {
             if (_lstDownloads.Columns.Count < 5 || _lstDownloads.ClientSize.Width == 0) return;
             UiHelper.UpdateTransferColumnWidths(_lstDownloads);
+        }
+
+        private void AppIcon_Click(object sender, EventArgs e)
+        {
+            new FrmAbout().ShowDialog();
         }
     }
 }

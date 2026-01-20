@@ -56,10 +56,16 @@ namespace WinFormsApp3.Data
         public DateTime StartTime { get; set; } = DateTime.Now;
         public string ErrorMessage { get; set; }
         public string LocalFilePath { get; set; }
-
-        // NEU: Zielpfad auf dem Server
         public string RemotePath { get; set; }
-
         public object Tag { get; set; }
+
+        // NEU: Liste der enthaltenen Dateien (für Ordner-Uploads)
+        public List<TransferSubItem> SubItems { get; set; } = new List<TransferSubItem>();
+    }
+
+    public class TransferSubItem
+    {
+        public string Name { get; set; }
+        public string Status { get; set; } = "Wartet"; // Wartet, Lädt, Fertig
     }
 }
