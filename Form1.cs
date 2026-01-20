@@ -22,9 +22,11 @@ namespace WinFormsApp3
         private CacheManager _cacheManager;
         private CancellationTokenSource _thumbnailCts;
         private System.Windows.Forms.Timer _refreshDebounceTimer;
-
-        // Für Drag & Drop Visualisierung
         private Cursor _dragCursor = null;
+
+        // V1.4 Variables: Sortier-Status merken
+        private int _sortColumn = -1;
+        private bool _sortAscending = true;
 
         public Form1(string token)
         {
@@ -98,7 +100,6 @@ namespace WinFormsApp3
                 lstRepos.Items.Clear();
                 lstRepos.Groups.Clear();
                 lstRepos.ShowGroups = true;
-
                 string cacheKey = _navState.IsInRoot ? "root" : $"{_navState.CurrentRepoId}:{_navState.CurrentPath}";
                 var cachedEntries = _cacheManager.Get<List<object>>(cacheKey);
 
@@ -143,7 +144,6 @@ namespace WinFormsApp3
             ListViewGroup grpShared = new ListViewGroup("   FÜR MICH FREIGEGEBEN", HorizontalAlignment.Left);
             lstRepos.Groups.Add(grpMine);
             lstRepos.Groups.Add(grpShared);
-
             foreach (var repo in repos)
             {
                 var item = new ListViewItem(repo.name, "repo");
@@ -152,7 +152,6 @@ namespace WinFormsApp3
                 string ownerDisplay = repo.type == "grepo" ? "Gruppe" : (repo.owner ?? "-");
                 item.SubItems.Add(ownerDisplay);
                 item.Tag = repo;
-
                 if (repo.type == "repo") item.Group = grpMine;
                 else if (repo.type == "srepo") item.Group = grpShared;
                 else if (repo.type == "grepo")
@@ -167,7 +166,6 @@ namespace WinFormsApp3
                     item.Group = targetGroup;
                 }
                 else item.Group = grpShared;
-
                 lstRepos.Items.Add(item);
             }
         }
@@ -177,7 +175,6 @@ namespace WinFormsApp3
             lstRepos.ShowGroups = false;
             var backItem = new ListViewItem(".. [Zurück]", "back") { Tag = new SeafileEntry { type = "back" } };
             lstRepos.Items.Add(backItem);
-
             foreach (var entry in entries)
             {
                 string iconKey = "file";
@@ -214,10 +211,8 @@ namespace WinFormsApp3
                 string ext = System.IO.Path.GetExtension(entry.name).ToLower();
                 if (new[] { ".jpg", ".png", ".jpeg", ".gif" }.Contains(ext))
                 {
-                    string fullPath = path.EndsWith("/") ?
-                        path + entry.name : path + "/" + entry.name;
+                    string fullPath = path.EndsWith("/") ? path + entry.name : path + "/" + entry.name;
                     Image thumb = await _seafileClient.GetThumbnailAsync(repoId, fullPath, 48);
-
                     if (thumb != null && !token.IsCancellationRequested)
                     {
                         this.Invoke(new Action(() => {
@@ -250,8 +245,7 @@ namespace WinFormsApp3
                     string folderName = UiHelper.ShowInputDialog("Neuer Ordner", "Name:");
                     if (!string.IsNullOrWhiteSpace(folderName))
                     {
-                        string newPath = _navState.CurrentPath.EndsWith("/") ?
-                            _navState.CurrentPath + folderName : _navState.CurrentPath + "/" + folderName;
+                        string newPath = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + folderName : _navState.CurrentPath + "/" + folderName;
                         bool success = await _seafileClient.CreateDirectoryAsync(_navState.CurrentRepoId, newPath);
                         if (success)
                         {
@@ -270,7 +264,6 @@ namespace WinFormsApp3
         private async void BtnDelete_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count == 0) return;
-
             string message = lstRepos.SelectedItems.Count == 1 ? GetDeleteMessage(lstRepos.SelectedItems[0].Tag) : $"Möchten Sie wirklich {lstRepos.SelectedItems.Count} Elemente unwiderruflich löschen?";
             if (!UiHelper.ShowDangerConfirmation("LÖSCHEN BESTÄTIGEN", message)) return;
 
@@ -296,8 +289,7 @@ namespace WinFormsApp3
 
         private string GetDeleteMessage(object tag)
         {
-            if (tag is SeafileEntry entry) return entry.type == "back" ?
-                "" : $"Möchten Sie '{entry.name}' wirklich löschen?";
+            if (tag is SeafileEntry entry) return entry.type == "back" ? "" : $"Möchten Sie '{entry.name}' wirklich löschen?";
             if (tag is SeafileRepo repo) return $"Möchten Sie die Bibliothek '{repo.name}' wirklich löschen?";
             return "Löschen?";
         }
@@ -314,11 +306,28 @@ namespace WinFormsApp3
             return false;
         }
 
-        private async void btnSearch_Click(object sender, EventArgs e)
+        // --- HANDLER FÜR SUCHE (ENTER KEY) ---
+        private async void TxtSearch_KeyDown(object sender, KeyEventArgs e)
         {
-            string searchTerm = UiHelper.ShowInputDialog("Globale Suche", "Suchbegriff:");
-            if (string.IsNullOrWhiteSpace(searchTerm)) { await LadeInhalt(); return; }
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true; // "Ping" verhindern
+                string term = _txtSearch.Text.Trim();
 
+                if (string.IsNullOrWhiteSpace(term))
+                {
+                    await LadeInhalt();
+                    return;
+                }
+                PerformSearch(term);
+            }
+        }
+
+        // Dummy für alte Referenzen, kann ignoriert werden
+        private void btnSearch_Click(object sender, EventArgs e) { }
+
+        private async void PerformSearch(string searchTerm)
+        {
             lstRepos.Visible = false;
             lstRepos.Items.Clear(); lstRepos.Groups.Clear(); lstRepos.ShowGroups = true;
             try
@@ -338,7 +347,6 @@ namespace WinFormsApp3
                         {
                             var entries = await _seafileClient.GetAllFilesRecursiveAsync(repo.id);
                             var matches = entries.Where(x => x.name.ToLower().Contains(searchTerm.ToLower())).ToList();
-
                             if (matches.Count > 0)
                             {
                                 var grp = new ListViewGroup(repo.name, HorizontalAlignment.Left);
@@ -432,6 +440,45 @@ namespace WinFormsApp3
                 }
         }
 
+        // --- HANDLER FÜR RENAME ---
+        private async void CtxRename_Click(object sender, EventArgs e)
+        {
+            if (lstRepos.SelectedItems.Count != 1) return;
+            var tag = lstRepos.SelectedItems[0].Tag;
+            string currentName = lstRepos.SelectedItems[0].Text;
+            string type = "";
+
+            if (tag is SeafileEntry entry)
+            {
+                if (entry.type == "back") return;
+                type = entry.type;
+            }
+            else if (tag is SeafileRepo)
+            {
+                UiHelper.ShowInfoDialog("Info", "Bibliotheken können hier nicht umbenannt werden.");
+                return;
+            }
+
+            string newName = UiHelper.ShowInputDialog("Umbenennen", $"Neuer Name für '{currentName}':");
+            if (!string.IsNullOrWhiteSpace(newName) && newName != currentName)
+            {
+                try
+                {
+                    string path = _navState.CurrentPath.EndsWith("/") ? _navState.CurrentPath + currentName : _navState.CurrentPath + "/" + currentName;
+                    bool isDir = (type == "dir");
+                    bool success = await _seafileClient.RenameEntryAsync(_navState.CurrentRepoId, path, isDir, newName);
+
+                    if (success)
+                    {
+                        _cacheManager.Clear();
+                        await LadeInhalt();
+                        new MaterialSnackBar("Erfolgreich umbenannt", "OK", true).Show(this);
+                    }
+                }
+                catch (Exception ex) { UiHelper.ShowErrorDialog("Fehler", ex.Message); }
+            }
+        }
+
         private void HandleSingleDownload(object tag)
         {
             bool started = false;
@@ -450,7 +497,6 @@ namespace WinFormsApp3
                     entryToDownload = tuple.Item2; navPath = entryToDownload.parent_dir ?? "/";
                 }
                 else if (tag is SeafileEntry entry) entryToDownload = entry;
-
                 if (entryToDownload != null && entryToDownload.type != "back")
                 {
                     _ = _downloadManager.DownloadEntryAsync(entryToDownload, repoId, navPath);
@@ -496,55 +542,82 @@ namespace WinFormsApp3
             }
         }
 
-        // =========================================================================
-        // DRAG & DROP LOGIK
-        // =========================================================================
-
-        private void lstRepos_ItemDrag(object sender, ItemDragEventArgs e)
+        // --- HANDLER FÜR SORTIEREN ---
+        private void LstRepos_ColumnClick(object sender, ColumnClickEventArgs e)
         {
-            if (e.Item is ListViewItem item)
+            if (e.Column != _sortColumn)
             {
-                _dragCursor = CreateDragCursorWithText(item);
-            }
-            lstRepos.DoDragDrop(e.Item, DragDropEffects.Move);
-        }
-
-        // NEU: Mit Highlight-Logic
-        private void LstRepos_DragOver(object sender, DragEventArgs e)
-        {
-            // 1. Koordinaten und Item ermitteln
-            Point cp = lstRepos.PointToClient(new Point(e.X, e.Y));
-            ListViewItem targetItem = lstRepos.GetItemAt(cp.X, cp.Y);
-
-            // 2. Index für Highlight ermitteln (-1 = keins)
-            int hoverIndex = (targetItem != null) ? targetItem.Index : -1;
-
-            // 3. Nur neu zeichnen, wenn sich der Index geändert hat
-            // Wir nutzen lstRepos.Tag als Speicher für den Hover-Index, damit UiHelper darauf zugreifen kann
-            int currentIndex = (lstRepos.Tag is int val) ? val : -1;
-
-            if (currentIndex != hoverIndex)
-            {
-                lstRepos.Tag = hoverIndex;
-                lstRepos.Invalidate(); // Erzwingt Neuzeichnen via UiHelper
-            }
-
-            // 4. Standard DragLogic
-            if (e.Data.GetDataPresent(typeof(ListViewItem)))
-            {
-                e.Effect = DragDropEffects.Move;
-            }
-            else if (e.Data.GetDataPresent(DataFormats.FileDrop))
-            {
-                e.Effect = DragDropEffects.Copy;
+                _sortColumn = e.Column;
+                _sortAscending = true;
             }
             else
             {
-                e.Effect = DragDropEffects.None;
+                _sortAscending = !_sortAscending;
             }
+
+            lstRepos.ListViewItemSorter = new ListViewSorter(e.Column, _sortAscending);
+            lstRepos.Sort();
         }
 
-        // NEU: Highlight entfernen wenn Maus die Liste verlässt
+        // --- HANDLER FÜR TRANSFER MENU (Clear List / Show in Folder) ---
+        private void SetupTransferContextMenu()
+        {
+            ContextMenuStrip ctxTransfer = new ContextMenuStrip();
+            ctxTransfer.Renderer = new ToolStripProfessionalRenderer(new DarkColorTable());
+            ctxTransfer.BackColor = Color.FromArgb(40, 40, 40);
+            ctxTransfer.ForeColor = Color.White;
+
+            ToolStripMenuItem itemOpen = new ToolStripMenuItem("Im Ordner anzeigen");
+            itemOpen.Click += (s, e) => {
+                if (_lstDownloads.SelectedItems.Count > 0 && _lstDownloads.SelectedItems[0].Tag is DownloadItem item)
+                {
+                    if (!string.IsNullOrEmpty(item.LocalFilePath))
+                    {
+                        if (System.IO.File.Exists(item.LocalFilePath)) System.Diagnostics.Process.Start("explorer.exe", $"/select, \"{item.LocalFilePath}\"");
+                        else if (System.IO.Directory.Exists(item.LocalFilePath)) System.Diagnostics.Process.Start("explorer.exe", item.LocalFilePath);
+                        else UiHelper.ShowErrorDialog("Fehler", "Datei nicht gefunden (evtl. gelöscht).");
+                    }
+                }
+            };
+
+            ToolStripMenuItem itemClear = new ToolStripMenuItem("Fertige entfernen");
+            itemClear.Click += (s, e) => {
+                _lstDownloads.BeginUpdate();
+                for (int i = _lstDownloads.Items.Count - 1; i >= 0; i--)
+                {
+                    if (_lstDownloads.Items[i].Tag is DownloadItem item && item.Status == "Fertig") _lstDownloads.Items.RemoveAt(i);
+                }
+                _lstDownloads.EndUpdate();
+            };
+
+            ctxTransfer.Items.Add(itemOpen);
+            ctxTransfer.Items.Add(new ToolStripSeparator());
+            ctxTransfer.Items.Add(itemClear);
+            _lstDownloads.ContextMenuStrip = ctxTransfer;
+        }
+
+        private void lstRepos_ItemDrag(object sender, ItemDragEventArgs e)
+        {
+            if (e.Item is ListViewItem item) _dragCursor = CreateDragCursorWithText(item);
+            lstRepos.DoDragDrop(e.Item, DragDropEffects.Move);
+        }
+
+        private void LstRepos_DragOver(object sender, DragEventArgs e)
+        {
+            Point cp = lstRepos.PointToClient(new Point(e.X, e.Y));
+            ListViewItem targetItem = lstRepos.GetItemAt(cp.X, cp.Y);
+            int hoverIndex = (targetItem != null) ? targetItem.Index : -1;
+            int currentIndex = (lstRepos.Tag is int val) ? val : -1;
+            if (currentIndex != hoverIndex)
+            {
+                lstRepos.Tag = hoverIndex;
+                lstRepos.Invalidate();
+            }
+            if (e.Data.GetDataPresent(typeof(ListViewItem))) e.Effect = DragDropEffects.Move;
+            else if (e.Data.GetDataPresent(DataFormats.FileDrop)) e.Effect = DragDropEffects.Copy;
+            else e.Effect = DragDropEffects.None;
+        }
+
         private void LstRepos_DragLeave(object sender, EventArgs e)
         {
             if ((lstRepos.Tag is int val) && val != -1)
@@ -566,19 +639,13 @@ namespace WinFormsApp3
             Bitmap bmp = new Bitmap(300, 40);
             using (Graphics g = Graphics.FromImage(bmp))
             {
-                using (SolidBrush bg = new SolidBrush(Color.FromArgb(100, 50, 50, 50)))
-                {
-                    g.FillRectangle(bg, 0, 0, 300, 40);
-                }
+                using (SolidBrush bg = new SolidBrush(Color.FromArgb(100, 50, 50, 50))) { g.FillRectangle(bg, 0, 0, 300, 40); }
                 if (item.ImageList != null && !string.IsNullOrEmpty(item.ImageKey))
                 {
                     Image icon = item.ImageList.Images[item.ImageKey];
                     g.DrawImage(icon, 5, 5, 32, 32);
                 }
-                using (Font f = new Font("Segoe UI", 10, FontStyle.Bold))
-                {
-                    g.DrawString(item.Text, f, Brushes.White, 40, 10);
-                }
+                using (Font f = new Font("Segoe UI", 10, FontStyle.Bold)) { g.DrawString(item.Text, f, Brushes.White, 40, 10); }
                 g.DrawRectangle(Pens.Orange, 0, 0, 299, 39);
             }
             return new Cursor(bmp.GetHicon());
@@ -593,22 +660,14 @@ namespace WinFormsApp3
 
         private async void LstRepos_DragDrop(object sender, DragEventArgs e)
         {
-            // Reset UI
             Cursor.Current = Cursors.Default;
             if (_dragCursor != null) { _dragCursor.Dispose(); _dragCursor = null; }
-
-            // Highlight entfernen (Cleanup)
             lstRepos.Tag = -1;
             lstRepos.Invalidate();
 
-            // A) UPLOAD LOGIK (Dateien von Windows in den Client ziehen)
             if (e.Data.GetDataPresent(DataFormats.FileDrop))
             {
-                if (_navState.IsInRoot)
-                {
-                    UiHelper.ShowInfoDialog("Info", "Bitte öffne erst eine Bibliothek.");
-                    return;
-                }
+                if (_navState.IsInRoot) { UiHelper.ShowInfoDialog("Info", "Bitte öffne erst eine Bibliothek."); return; }
                 string[] droppedPaths = (string[])e.Data.GetData(DataFormats.FileDrop);
                 if (droppedPaths != null && droppedPaths.Length > 0)
                 {
@@ -617,148 +676,73 @@ namespace WinFormsApp3
                         _ = _downloadManager.UploadFilesAsync(droppedPaths, _navState.CurrentRepoId, _navState.CurrentPath);
                         new MaterialSnackBar("Upload gestartet!", "OK", true).Show(this);
                     }
-                    catch (Exception ex)
-                    {
-                        UiHelper.ShowScrollableErrorDialog("Upload Fehler", ex.Message);
-                    }
+                    catch (Exception ex) { UiHelper.ShowScrollableErrorDialog("Upload Fehler", ex.Message); }
                 }
                 return;
             }
 
-            // B) MOVE LOGIK (Innerhalb des Clients verschieben)
             if (e.Data.GetDataPresent(typeof(ListViewItem)))
             {
                 var srcItem = (ListViewItem)e.Data.GetData(typeof(ListViewItem));
-
-                // Bibliotheken selbst können nicht verschoben werden [cite: 164]
-                if (srcItem.Tag is SeafileRepo)
-                {
-                    UiHelper.ShowInfoDialog("Nicht möglich", "Bibliotheken können nicht verschoben werden.");
-                    return;
-                }
-
+                if (srcItem.Tag is SeafileRepo) { UiHelper.ShowInfoDialog("Nicht möglich", "Bibliotheken können nicht verschoben werden."); return; }
                 if (!(srcItem.Tag is SeafileEntry srcEntry)) return;
-
-                // Ziel ermitteln
                 Point cp = lstRepos.PointToClient(new Point(e.X, e.Y));
                 ListViewItem targetItem = lstRepos.GetItemAt(cp.X, cp.Y);
-
                 if (targetItem == null) return;
                 if (!(targetItem.Tag is SeafileEntry targetEntry)) return;
-
-                // Validierung: Nur Ordner oder "Zurück" sind gültige Ziele
-                if (targetEntry.type != "dir" && targetEntry.type != "back")
-                {
-                    return;
-                }
-
-                // Selbst-Check: Nicht in sich selbst verschieben
+                if (targetEntry.type != "dir" && targetEntry.type != "back") return;
                 if (srcEntry.id == targetEntry.id) return;
 
-                // --- NEUE LOGIK FÜR ZIEL-PFAD ---
-                string currentDir = _navState.CurrentPath; // z.B. "/OrdnerA/OrdnerB"
-                if (!currentDir.EndsWith("/")) currentDir += "/"; // Sicherstellen: "/OrdnerA/OrdnerB/"
-
+                string currentDir = _navState.CurrentPath;
+                if (!currentDir.EndsWith("/")) currentDir += "/";
                 string dstDir = "";
                 string targetNameDisplay = "";
 
                 if (targetEntry.type == "back")
                 {
-                    // Case 1: Nach oben verschieben ("..")
-
-                    // Wenn wir im Root sind, können wir nicht höher gehen
-                    if (_navState.CurrentPath == "/" || string.IsNullOrEmpty(_navState.CurrentPath))
-                    {
-                        UiHelper.ShowInfoDialog("Nicht möglich", "Du bist bereits im Hauptverzeichnis dieser Bibliothek.");
-                        return;
-                    }
-
-                    // Eltern-Ordner berechnen
-                    // Logik: Letzten Slash finden und abschneiden.
-                    // Bsp: "/A/B" (Current) -> parent ist "/A"
-                    // Bsp: "/A" (Current) -> parent ist "/"
+                    if (_navState.CurrentPath == "/" || string.IsNullOrEmpty(_navState.CurrentPath)) { UiHelper.ShowInfoDialog("Nicht möglich", "Du bist bereits im Hauptverzeichnis."); return; }
                     string cleanPath = _navState.CurrentPath.TrimEnd('/');
                     int lastSlashIndex = cleanPath.LastIndexOf('/');
-
-                    if (lastSlashIndex <= 0) dstDir = "/"; // Wir landen im Root
-                    else dstDir = cleanPath.Substring(0, lastSlashIndex + 1); // Wir landen im Parent
-
+                    if (lastSlashIndex <= 0) dstDir = "/"; else dstDir = cleanPath.Substring(0, lastSlashIndex + 1);
                     targetNameDisplay = "den übergeordneten Ordner";
                 }
                 else
                 {
-                    // Case 2: In einen Unterordner verschieben
                     dstDir = currentDir + targetEntry.name;
                     targetNameDisplay = $"'{targetEntry.name}'";
                 }
 
-                // Sicherheits-Check: Verschieben in den eigenen Parent (sinnlos)
-                // srcEntry parent ist currentDir. Wenn dstDir == currentDir, machen wir nichts.
-                // (Wird hier meist durch UI abgefangen, aber sicher ist sicher)
-
                 string typeLabel = srcEntry.type == "dir" ? "den Ordner" : "die Datei";
                 if (!UiHelper.ShowConfirmationDialog("Verschieben", $"Möchtest du {typeLabel} '{srcEntry.name}' in {targetNameDisplay} verschieben?")) return;
-
                 try
                 {
                     lblStatus.Text = "Verschiebe...";
                     string srcPath = currentDir + srcEntry.name;
-
-                    // Prüfen ob es ein Ordner ist (für API Parameter)
                     bool isDir = srcEntry.type == "dir";
-
-                    // 1. Versuch: Sauberer Move (API Call)
                     try
                     {
-                        // [cite: 175] MoveEntryAsync Aufruf
                         bool success = await _seafileClient.MoveEntryAsync(_navState.CurrentRepoId, srcPath, dstDir, isDir);
-                        if (success)
-                        {
-                            new MaterialSnackBar("Erfolgreich verschoben", "OK", true).Show(this);
-                            _cacheManager.Clear();
-                            await LadeInhalt();
-                            return;
-                        }
+                        if (success) { new MaterialSnackBar("Erfolgreich verschoben", "OK", true).Show(this); _cacheManager.Clear(); await LadeInhalt(); return; }
                     }
                     catch (Exception moveEx)
                     {
-                        // Move fehlgeschlagen (oft API "Cross-Device" Fehler o.ä.) -> Fallback auf Copy+Delete
-                        string warningMsg = $"Das direkte Verschieben ist fehlgeschlagen.\nFehler: {moveEx.Message}\n\n" +
-                                            "Möchtest du stattdessen versuchen, das Objekt zu KOPIEREN und das Original anschließend zu LÖSCHEN?\n\n" +
-                                            "WARNUNG: Sollte der Vorgang unterbrochen werden, könnte das Objekt doppelt vorhanden sein.";
-
+                        string warningMsg = $"Direktes Verschieben fehlgeschlagen: {moveEx.Message}\n\nKopieren + Löschen versuchen?";
                         if (UiHelper.ShowDangerConfirmation("Verschieben fehlgeschlagen", warningMsg))
                         {
                             lblStatus.Text = "Kopiere...";
                             bool copySuccess = await _seafileClient.CopyEntryAsync(_navState.CurrentRepoId, srcPath, dstDir, isDir);
-
                             if (copySuccess)
                             {
                                 lblStatus.Text = "Lösche Original...";
                                 bool deleteSuccess = await _seafileClient.DeleteEntryAsync(_navState.CurrentRepoId, srcPath, isDir);
-                                if (deleteSuccess)
-                                {
-                                    new MaterialSnackBar("Erfolgreich verschoben (Copy+Delete).", "OK", true).Show(this);
-                                    _cacheManager.Clear();
-                                    await LadeInhalt();
-                                }
-                                else
-                                {
-                                    UiHelper.ShowErrorDialog("Teilerfolg", "Kopiert, aber Original konnte nicht gelöscht werden.");
-                                    await LadeInhalt();
-                                }
+                                if (deleteSuccess) { new MaterialSnackBar("Verschoben (Copy+Delete).", "OK", true).Show(this); _cacheManager.Clear(); await LadeInhalt(); }
+                                else { UiHelper.ShowErrorDialog("Teilerfolg", "Kopiert, aber Original konnte nicht gelöscht werden."); await LadeInhalt(); }
                             }
                         }
                     }
                 }
-                catch (Exception ex)
-                {
-                    UiHelper.ShowScrollableErrorDialog("Fehler beim Verschieben", ex.Message);
-                }
-                finally
-                {
-                    lblStatus.Text = $"{_navState.CurrentRepoName}: {_navState.CurrentPath}";
-                }
+                catch (Exception ex) { UiHelper.ShowScrollableErrorDialog("Fehler beim Verschieben", ex.Message); }
+                finally { lblStatus.Text = $"{_navState.CurrentRepoName}: {_navState.CurrentPath}"; }
             }
         }
 
@@ -773,11 +757,7 @@ namespace WinFormsApp3
 
         private void AddDownloadToUi(DownloadItem item)
         {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new Action<DownloadItem>(AddDownloadToUi), item);
-                return;
-            }
+            if (this.InvokeRequired) { this.Invoke(new Action<DownloadItem>(AddDownloadToUi), item); return; }
             string cleanName = item.FileName.Replace("⬇", "").Replace("⬆", "").Trim();
             var lvi = new ListViewItem(cleanName);
             lvi.SubItems.Add(item.Status);
@@ -792,24 +772,17 @@ namespace WinFormsApp3
 
         private void UpdateDownloadInUi(DownloadItem item)
         {
-            if (this.InvokeRequired)
-            {
-                this.Invoke(new Action<DownloadItem>(UpdateDownloadInUi), item);
-                return;
-            }
+            if (this.InvokeRequired) { this.Invoke(new Action<DownloadItem>(UpdateDownloadInUi), item); return; }
             if (item.Tag is ListViewItem lvi)
             {
                 lvi.SubItems[1].Text = item.Status;
                 lvi.SubItems[2].Text = item.SpeedString;
                 lvi.SubItems[3].Text = item.Progress + "%";
-                if (item.Status == "Fertig") lvi.ForeColor = Color.LightGreen;
-                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen") lvi.ForeColor = Color.Salmon;
+                if (item.Status == "Fertig") { lvi.ForeColor = Color.LightGreen; lvi.ImageKey = "ok"; }
+                else if (item.Status.StartsWith("Fehler") || item.Status == "Abgebrochen") { lvi.ForeColor = Color.Salmon; lvi.ImageKey = "error"; }
+                else { lvi.ForeColor = Color.White; lvi.ImageKey = item.Type == "Upload" ? "upload" : "download"; }
             }
-            if (item.Status == "Fertig" && item.Type == "Upload" && _refreshDebounceTimer != null)
-            {
-                _refreshDebounceTimer.Stop();
-                _refreshDebounceTimer.Start();
-            }
+            if (item.Status == "Fertig" && item.Type == "Upload" && _refreshDebounceTimer != null) { _refreshDebounceTimer.Stop(); _refreshDebounceTimer.Start(); }
         }
 
         private void _lstDownloads_DoubleClick(object sender, EventArgs e)

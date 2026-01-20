@@ -13,7 +13,6 @@ namespace WinFormsApp3
 {
     public partial class Form1
     {
-        // UI Controls
         private MaterialTabControl _tabControl;
         private MaterialTabSelector _tabSelector;
         private System.Windows.Forms.TabPage _tabFiles;
@@ -22,6 +21,10 @@ namespace WinFormsApp3
         private FlowLayoutPanel _flowPath;
         private ImageList _repoIcons;
         private PictureBox _appIcon;
+
+        // V1.4 Variables
+        private TextBox _txtSearch;
+        private ToolTip _actionToolTip;
 
         private void InitializeUiComponents()
         {
@@ -63,11 +66,7 @@ namespace WinFormsApp3
                 Cursor = Cursors.Default
             };
             try { _appIcon.Image = Properties.Resources.app_logo; }
-            catch
-            {
-                _appIcon.Image = Properties.Resources.icon_repo;
-            }
-
+            catch { _appIcon.Image = Properties.Resources.icon_repo; }
             this.Text = "BBS-ME File Explorer";
         }
 
@@ -83,8 +82,7 @@ namespace WinFormsApp3
                 SelectedIndex = 0,
                 Size = new Size(this.ClientSize.Width, this.ClientSize.Height - 112),
                 TabIndex = 100,
-                Anchor = AnchorStyles.Top |
-                AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
+                Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right
             };
             _tabFiles = new System.Windows.Forms.TabPage { Text = "Dateien", BackColor = darkBackground };
             _tabDownloads = new System.Windows.Forms.TabPage { Text = "Transfers", BackColor = darkBackground };
@@ -102,8 +100,7 @@ namespace WinFormsApp3
                 Name = "tabSelector1",
                 Size = new Size(this.ClientSize.Width, 48),
                 TabIndex = 99,
-                Anchor = AnchorStyles.Top |
-                AnchorStyles.Left | AnchorStyles.Right,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
                 CharacterCasing = MaterialTabSelector.CustomCharacterCasing.Normal
             };
             this.Controls.Add(_tabSelector);
@@ -155,6 +152,8 @@ namespace WinFormsApp3
             ImageList downloadIcons = new ImageList { ImageSize = new Size(24, 24), ColorDepth = ColorDepth.Depth32Bit };
             downloadIcons.Images.Add("upload", Properties.Resources.icon_upload);
             downloadIcons.Images.Add("download", Properties.Resources.icon_download);
+            downloadIcons.Images.Add("ok", Properties.Resources.Status_ok);
+            downloadIcons.Images.Add("error", Properties.Resources.Status_error);
             _lstDownloads.SmallImageList = downloadIcons;
 
             _lstDownloads.SizeChanged += (s, e) => UiHelper.UpdateTransferColumnWidths(_lstDownloads);
@@ -186,8 +185,7 @@ namespace WinFormsApp3
                 BackColor = Color.Transparent,
                 FlowDirection = FlowDirection.LeftToRight,
                 WrapContents = false,
-                Anchor = AnchorStyles.Top |
-                AnchorStyles.Left,
+                Anchor = AnchorStyles.Top | AnchorStyles.Left,
                 Location = new Point(startX, 15)
             };
             actionPanel.Controls.Add(_flowPath);
@@ -204,17 +202,16 @@ namespace WinFormsApp3
 
         private void InitializeCustomUI()
         {
-            ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click);
+            // Context Menu mit Rename
+            ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click, CtxRename_Click);
             ToolStripMenuItem itemJump = new ToolStripMenuItem("Gehe zu") { Name = "ItemJump", Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_jump, 16, 16) };
             itemJump.Click += CtxJumpTo_Click;
             ctxMenu.Items.Insert(0, new ToolStripSeparator());
             ctxMenu.Items.Insert(0, itemJump);
 
-            if (ctxMenu.Items.Count > 2 && ctxMenu.Items[2] != null) ctxMenu.Items[2].Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_download, 16, 16);
-            if (ctxMenu.Items.Count > 4 && ctxMenu.Items[4] != null) ctxMenu.Items[4].Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_löschen, 16, 16);
-
             ctxMenu.Opening += CtxMenu_Opening;
             lstRepos.ContextMenuStrip = ctxMenu;
+
             UiHelper.SetupListView(lstRepos, _repoIcons);
             lstRepos.Columns.Clear();
             lstRepos.Columns.Add("Name", 400);
@@ -225,14 +222,16 @@ namespace WinFormsApp3
             lstRepos.DoubleClick += lstRepos_DoubleClick;
             lstRepos.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(lstRepos);
 
-            // WICHTIG: Hier sind die Events
+            // SORTIEREN (V1.4)
+            lstRepos.ColumnClick += LstRepos_ColumnClick;
+
+            // DRAG & DROP
             lstRepos.AllowDrop = true;
             lstRepos.ItemDrag += lstRepos_ItemDrag;
             lstRepos.DragEnter += LstRepos_DragEnter;
             lstRepos.DragOver += LstRepos_DragOver;
             lstRepos.DragDrop += LstRepos_DragDrop;
             lstRepos.GiveFeedback += lstRepos_GiveFeedback;
-            // NEU: Damit das Highlight verschwindet
             lstRepos.DragLeave += LstRepos_DragLeave;
 
             ReplaceMaterialButtonsWithStandard();
@@ -241,6 +240,9 @@ namespace WinFormsApp3
                 if (Controls.ContainsKey("panelActionbar")) Controls["panelActionbar"].BackColor = Color.FromArgb(45, 45, 48);
             }
             catch { }
+
+            // TRANSFER MENU
+            SetupTransferContextMenu();
         }
 
         private void ReplaceMaterialButtonsWithStandard()
@@ -250,12 +252,14 @@ namespace WinFormsApp3
             else if (_tabFiles.Controls.ContainsKey("panelActionbar")) actionPanel = _tabFiles.Controls["panelActionbar"];
 
             if (actionPanel == null) return;
+
             var toRemove = actionPanel.Controls.OfType<Control>()
-                .Where(c => c is MaterialButton || c.Name.StartsWith("materialButton") || c.Name == "btnLogout" || c.Name == "btnSettings" || c.Name == "btnSearch" || c is System.Windows.Forms.Button)
+                .Where(c => c is MaterialButton || c.Name.StartsWith("materialButton") || c.Name == "btnLogout" || c.Name == "btnSettings" || c.Name == "btnSearch" || c is System.Windows.Forms.Button || c is TextBox || c.Name == "pnlSearchContainer")
                 .ToList();
             foreach (var c in toRemove) actionPanel.Controls.Remove(c);
 
             actionPanel.BackColor = Color.FromArgb(45, 45, 48);
+
             if (_appIcon != null)
             {
                 _appIcon.Parent = actionPanel;
@@ -264,36 +268,88 @@ namespace WinFormsApp3
                 _appIcon.BringToFront();
             }
 
-            int leftX = (_appIcon != null) ?
-                _appIcon.Right + 15 : 10;
+            if (_actionToolTip == null)
+            {
+                _actionToolTip = new ToolTip();
+                _actionToolTip.AutoPopDelay = 5000;
+                _actionToolTip.InitialDelay = 500;
+                _actionToolTip.ReshowDelay = 200;
+                _actionToolTip.ShowAlways = true;
+            }
+            _actionToolTip.RemoveAll();
+
+            int leftX = (_appIcon != null) ? _appIcon.Right + 15 : 10;
             int btnY = 12;
             int rightEdge = actionPanel.Width - 10;
 
-            System.Windows.Forms.Button btnSettings = CreateFlatButton("EINSTELLUNGEN", Properties.Resources.icon_settings);
+            // RECHTS
+            System.Windows.Forms.Button btnSettings = CreateFlatButton("", Properties.Resources.icon_settings);
+            btnSettings.Text = "";
+            btnSettings.Width = 40;
             btnSettings.Name = "btnSettings";
             btnSettings.Location = new Point(rightEdge - btnSettings.Width, btnY);
             btnSettings.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSettings.Click += (s, e) => new FrmSettings().ShowDialog();
+            _actionToolTip.SetToolTip(btnSettings, "Einstellungen");
             actionPanel.Controls.Add(btnSettings);
 
-            System.Windows.Forms.Button btnOut = CreateFlatButton("AUSLOGGEN", Properties.Resources.icon_logout);
+            System.Windows.Forms.Button btnOut = CreateFlatButton("", Properties.Resources.icon_logout);
+            btnOut.Text = "";
+            btnOut.Width = 40;
             btnOut.Name = "btnLogout";
-            btnOut.Location = new Point(btnSettings.Left - 10 - btnOut.Width, btnY);
+            btnOut.Location = new Point(btnSettings.Left - 5 - btnOut.Width, btnY);
             btnOut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnOut.Click += btnLogout_Click;
+            _actionToolTip.SetToolTip(btnOut, "Abmelden");
             actionPanel.Controls.Add(btnOut);
-            System.Windows.Forms.Button btnSearch = CreateFlatButton("SUCHEN", Properties.Resources.icon_search);
-            btnSearch.Name = "btnSearch";
-            btnSearch.Location = new Point(btnOut.Left - 10 - btnSearch.Width, btnY);
-            btnSearch.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnSearch.Click += btnSearch_Click;
-            actionPanel.Controls.Add(btnSearch);
 
+            // SEARCH CONTAINER (Hier war der Panel Fehler -> System.Windows.Forms.Panel fixt es)
+            System.Windows.Forms.Panel pnlSearch = new System.Windows.Forms.Panel();
+            pnlSearch.Name = "pnlSearchContainer";
+            pnlSearch.BackColor = Color.FromArgb(60, 60, 65);
+            pnlSearch.Size = new Size(240, 38);
+            pnlSearch.Location = new Point(btnOut.Left - 15 - pnlSearch.Width, btnY);
+            pnlSearch.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+
+            pnlSearch.Paint += (s, e) => {
+                using (Pen p = new Pen(Color.FromArgb(80, 80, 80)))
+                    e.Graphics.DrawRectangle(p, 0, 0, pnlSearch.Width - 1, pnlSearch.Height - 1);
+            };
+
+            PictureBox picSearch = new PictureBox
+            {
+                Image = ResizeImage(Properties.Resources.icon_search, 20, 20),
+                Size = new Size(24, 24),
+                SizeMode = PictureBoxSizeMode.CenterImage,
+                BackColor = Color.Transparent,
+                Location = new Point(5, 7),
+                Cursor = Cursors.IBeam
+            };
+            picSearch.Click += (s, e) => _txtSearch?.Focus();
+
+            _txtSearch = new TextBox();
+            _txtSearch.BorderStyle = BorderStyle.None;
+            _txtSearch.BackColor = pnlSearch.BackColor;
+            _txtSearch.ForeColor = Color.WhiteSmoke;
+            _txtSearch.Font = new Font("Segoe UI", 11F);
+            _txtSearch.Location = new Point(35, 9);
+            _txtSearch.Width = pnlSearch.Width - 45;
+            _txtSearch.PlaceholderText = "Suchen...";
+            _txtSearch.KeyDown += TxtSearch_KeyDown;
+
+            pnlSearch.Controls.Add(picSearch);
+            pnlSearch.Controls.Add(_txtSearch);
+            _actionToolTip.SetToolTip(pnlSearch, "Tippen & Enter drücken");
+            _actionToolTip.SetToolTip(picSearch, "Suche starten");
+            actionPanel.Controls.Add(pnlSearch);
+
+            // LINKS
             System.Windows.Forms.Button btnNew = CreateFlatButton("NEU", Properties.Resources.icon_new);
             btnNew.Name = "btnNew";
             btnNew.Location = new Point(leftX, btnY);
             btnNew.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             btnNew.Click += BtnNew_Click;
+            _actionToolTip.SetToolTip(btnNew, "Neue Bibliothek oder Ordner erstellen");
             actionPanel.Controls.Add(btnNew);
 
             System.Windows.Forms.Button btnDel = CreateFlatButton("LÖSCHEN", Properties.Resources.icon_delete);
@@ -301,6 +357,7 @@ namespace WinFormsApp3
             btnDel.Location = new Point(btnNew.Right + 10, btnY);
             btnDel.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             btnDel.Click += BtnDelete_Click;
+            _actionToolTip.SetToolTip(btnDel, "Markierte Elemente löschen");
             actionPanel.Controls.Add(btnDel);
         }
 
