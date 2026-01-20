@@ -33,6 +33,7 @@ namespace WinFormsApp3.Data
 
         private void UpdateProgress(DownloadItem item, long currentBytes, long totalBytes, string statusPrefix)
         {
+            // Speed Calculation
             DateTime now = DateTime.Now;
             if (_lastUpdate == DateTime.MinValue)
             {
@@ -44,16 +45,20 @@ namespace WinFormsApp3.Data
                 double seconds = (now - _lastUpdate).TotalSeconds;
                 long bytesDiff = currentBytes - _lastBytes;
                 double speed = bytesDiff / seconds;
+
                 item.SpeedString = UiHelper.FormatByteSize((long)speed) + "/s";
+
                 _lastUpdate = now;
                 _lastBytes = currentBytes;
             }
 
             int percent = totalBytes > 0 ? (int)((double)currentBytes / totalBytes * 100) : 0;
+
             item.Status = statusPrefix;
             item.Progress = percent;
             item.BytesTransferred = currentBytes;
             item.TotalSize = totalBytes;
+
             OnItemUpdated?.Invoke(item);
         }
 
@@ -80,9 +85,20 @@ namespace WinFormsApp3.Data
         private async Task UploadSingleFileAsync(string localPath, string repoId, string targetPath)
         {
             string fileName = Path.GetFileName(localPath);
-            var item = new DownloadItem { FileName = "⬆ " + fileName, Type = "Upload", TotalSize = new FileInfo(localPath).Length, LocalFilePath = localPath };
+
+            // NEU: RemotePath wird gesetzt
+            var item = new DownloadItem
+            {
+                FileName = "⬆ " + fileName,
+                Type = "Upload",
+                TotalSize = new FileInfo(localPath).Length,
+                RemotePath = targetPath
+            };
+
             History.Add(item);
             OnDownloadStarted?.Invoke(item);
+
+            // Reset Speed Calc
             _lastBytes = 0;
             _lastUpdate = DateTime.MinValue;
 
@@ -91,6 +107,7 @@ namespace WinFormsApp3.Data
                 UpdateStatus(item, "Hole Link...", 0);
                 string link = await _client.GetUploadLinkAsync(repoId, targetPath);
                 if (string.IsNullOrEmpty(link)) throw new Exception("Kein Upload-Link erhalten.");
+
                 await _client.UploadFileWithProgressAsync(link, localPath, targetPath, fileName, (sent, total) =>
                 {
                     UpdateProgress(item, sent, total, "Lade hoch...");
@@ -102,7 +119,9 @@ namespace WinFormsApp3.Data
         {
             string folderName = new DirectoryInfo(localDir).Name;
             string newRemotePath = remoteBasePath.EndsWith("/") ? remoteBasePath + folderName : remoteBasePath + "/" + folderName;
+
             try { await _client.CreateDirectoryAsync(repoId, newRemotePath); } catch { }
+
             string[] files = Directory.GetFiles(localDir);
             using (var semaphore = new SemaphoreSlim(3))
             {
@@ -114,8 +133,11 @@ namespace WinFormsApp3.Data
                 });
                 await Task.WhenAll(tasks);
             }
+
             foreach (string subDir in Directory.GetDirectories(localDir))
+            {
                 await UploadFolderRecursiveAsync(subDir, repoId, newRemotePath);
+            }
         }
 
         public async Task DownloadMultipleFilesAsZipAsync(List<object> items, string defaultRepoId, string defaultZipName)
@@ -126,8 +148,7 @@ namespace WinFormsApp3.Data
             var masterItem = new DownloadItem
             {
                 FileName = "⬇ " + Path.GetFileName(saveZipPath),
-                Type = "Batch Download",
-                LocalFilePath = saveZipPath
+                Type = "Batch Download"
             };
             History.Add(masterItem);
             OnDownloadStarted?.Invoke(masterItem);
@@ -136,15 +157,18 @@ namespace WinFormsApp3.Data
             {
                 string tempRoot = Path.Combine(Path.GetTempPath(), "SeafileBatch_" + Guid.NewGuid().ToString().Substring(0, 8));
                 Directory.CreateDirectory(tempRoot);
+
                 try
                 {
                     int totalItems = items.Count;
                     int processed = 0;
+
                     foreach (var obj in items)
                     {
                         string currentRepoId = defaultRepoId;
                         SeafileEntry entry = null;
                         SeafileRepo repo = null;
+
                         if (obj is Tuple<string, SeafileEntry> tuple) { currentRepoId = tuple.Item1; entry = tuple.Item2; }
                         else if (obj is SeafileEntry e) { entry = e; }
                         else if (obj is SeafileRepo r) { repo = r; currentRepoId = r.id; }
@@ -159,6 +183,7 @@ namespace WinFormsApp3.Data
                         {
                             string fullEntryPath = (entry.parent_dir ?? "/").TrimEnd('/') + "/" + entry.name;
                             string localDest = Path.Combine(tempRoot, entry.name);
+
                             if (entry.type == "dir")
                             {
                                 Directory.CreateDirectory(localDest);
@@ -189,6 +214,7 @@ namespace WinFormsApp3.Data
             var item = new DownloadItem { FileName = "⬇ " + repo.name, Type = "Bibliothek" };
             History.Add(item);
             OnDownloadStarted?.Invoke(item);
+
             await StartTransferSafely(item, async () =>
             {
                 var dummyEntry = new SeafileEntry { name = repo.name, type = "dir" };
@@ -211,9 +237,9 @@ namespace WinFormsApp3.Data
 
         private async Task DownloadSingleFileAsync(DownloadItem item, SeafileEntry entry, string repoId, string fullPath)
         {
-            string savePath = GetSavePathOnMainThread(entry.name, "Alle Dateien (*.*)|*.*");
+            string savePath = GetSavePathOnMainThread(entry.name, "Alle Dateien (*. *)|*.*");
             if (savePath == null) throw new OperationCanceledException();
-            item.LocalFilePath = savePath;
+
             item.TotalSize = entry.size;
             _lastBytes = 0;
             _lastUpdate = DateTime.MinValue;
@@ -230,12 +256,13 @@ namespace WinFormsApp3.Data
         {
             string savePath = GetSavePathOnMainThread(entry.name + ".zip", "ZIP Archiv (*.zip)|*.zip");
             if (savePath == null) throw new OperationCanceledException();
-            item.LocalFilePath = savePath;
+
             bool serverZipFailed = false;
             try
             {
                 UpdateStatus(item, "Server packt...", 0);
                 string zipLink = await _client.GetDirectoryZipLinkAsync(repoId, fullPath);
+
                 _lastBytes = 0;
                 _lastUpdate = DateTime.MinValue;
                 await _client.DownloadFileWithProgressAsync(zipLink, savePath, (curr, total) =>
@@ -243,7 +270,11 @@ namespace WinFormsApp3.Data
                     UpdateProgress(item, curr, total, "Lade ZIP...");
                 });
             }
-            catch { serverZipFailed = true; }
+            catch
+            {
+                serverZipFailed = true;
+            }
+
             if (serverZipFailed)
             {
                 item.Type = "Ordner (Turbo)";
@@ -255,6 +286,7 @@ namespace WinFormsApp3.Data
         {
             string tempRoot = Path.Combine(Path.GetTempPath(), "Seafile_" + Guid.NewGuid().ToString().Substring(0, 8));
             Directory.CreateDirectory(tempRoot);
+
             try
             {
                 await DownloadFolderContentsRecursively(item, repoId, folderPath, tempRoot, true);
@@ -278,14 +310,20 @@ namespace WinFormsApp3.Data
                         string fullFilePathOnServer = file.parent_dir.EndsWith("/") ? file.parent_dir + file.name : file.parent_dir + "/" + file.name;
                         string relativePath = fullFilePathOnServer;
                         if (serverFolderPath != "/" && fullFilePathOnServer.StartsWith(serverFolderPath))
+                        {
                             relativePath = fullFilePathOnServer.Substring(serverFolderPath.Length);
+                        }
                         string relativeLocalPath = relativePath.Replace("/", Path.DirectorySeparatorChar.ToString()).TrimStart(Path.DirectorySeparatorChar);
                         string localDest = Path.Combine(localTargetDir, relativeLocalPath);
                         Directory.CreateDirectory(Path.GetDirectoryName(localDest));
                         string link = await _client.GetDownloadLinkAsync(repoId, fullFilePathOnServer);
                         await _client.DownloadFileWithProgressAsync(link, localDest, null);
+
                         Interlocked.Increment(ref processed);
-                        if (updateProgress) UpdateStatus(item, $"Turbo: {processed}/{files.Count}", (int)((double)processed / files.Count * 100));
+                        if (updateProgress)
+                        {
+                            UpdateStatus(item, $"Turbo: {processed}/{files.Count}", (int)((double)processed / files.Count * 100));
+                        }
                     }
                     finally { semaphore.Release(); }
                 });
@@ -305,11 +343,16 @@ namespace WinFormsApp3.Data
             {
                 item.ErrorMessage = ex.Message;
                 UpdateStatus(item, "Fehler", 0);
+
                 var mainForm = Application.OpenForms.OfType<Form>().FirstOrDefault();
                 if (mainForm != null && mainForm.InvokeRequired)
+                {
                     mainForm.Invoke(new Action(() => UiHelper.ShowScrollableErrorDialog("Transfer-Fehler", $"Objekt: {item.FileName}\n\nFehler: {ex.Message}")));
+                }
                 else
+                {
                     UiHelper.ShowScrollableErrorDialog("Transfer-Fehler", $"Objekt: {item.FileName}\n\nFehler: {ex.Message}");
+                }
             }
         }
 

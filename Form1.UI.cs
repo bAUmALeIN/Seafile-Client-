@@ -21,8 +21,6 @@ namespace WinFormsApp3
         private FlowLayoutPanel _flowPath;
         private ImageList _repoIcons;
         private PictureBox _appIcon;
-
-        // V1.4 Variables
         private TextBox _txtSearch;
         private ToolTip _actionToolTip;
 
@@ -202,12 +200,19 @@ namespace WinFormsApp3
 
         private void InitializeCustomUI()
         {
-            // Context Menu mit Rename
             ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click, CtxRename_Click);
             ToolStripMenuItem itemJump = new ToolStripMenuItem("Gehe zu") { Name = "ItemJump", Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_jump, 16, 16) };
             itemJump.Click += CtxJumpTo_Click;
             ctxMenu.Items.Insert(0, new ToolStripSeparator());
             ctxMenu.Items.Insert(0, itemJump);
+
+            // NEU: VORSCHAU KNOPF HINZUFÜGEN
+            ToolStripMenuItem itemPreview = new ToolStripMenuItem("Vorschau") { Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_search, 16, 16) };
+            itemPreview.Click += CtxPreview_Click; // Event aus Form1.cs
+            itemPreview.Font = new Font("Segoe UI", 9f, FontStyle.Bold);
+
+            ctxMenu.Items.Insert(0, new ToolStripSeparator());
+            ctxMenu.Items.Insert(0, itemPreview);
 
             ctxMenu.Opening += CtxMenu_Opening;
             lstRepos.ContextMenuStrip = ctxMenu;
@@ -303,7 +308,7 @@ namespace WinFormsApp3
             _actionToolTip.SetToolTip(btnOut, "Abmelden");
             actionPanel.Controls.Add(btnOut);
 
-            // SEARCH CONTAINER (Hier war der Panel Fehler -> System.Windows.Forms.Panel fixt es)
+            // SEARCH CONTAINER
             System.Windows.Forms.Panel pnlSearch = new System.Windows.Forms.Panel();
             pnlSearch.Name = "pnlSearchContainer";
             pnlSearch.BackColor = Color.FromArgb(60, 60, 65);

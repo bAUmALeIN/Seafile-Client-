@@ -14,9 +14,8 @@ namespace WinFormsApp3
     public partial class FrmTransferDetail : MaterialForm
     {
         private readonly DownloadItem _item;
-
         // UI Controls
-        private Label lblValType, lblValStatus, lblValRate, lblValProgress, lblValStart, lblMsg;
+        private Label lblValType, lblValStatus, lblValRate, lblValProgress, lblValStart, lblMsg, lblValRemotePath;
         private PictureBox picStatus;
         private Label lblHeader;
 
@@ -25,14 +24,12 @@ namespace WinFormsApp3
         private System.Windows.Forms.Timer _refreshTimer;
         private float _currentAngle = 0f;
         private Image _loadingImageOriginal;
-
         // Theme Backup
         private MaterialColorScheme _defaultScheme;
 
         public FrmTransferDetail(DownloadItem item)
         {
             _item = item;
-
             // Theme sichern
             _defaultScheme = MaterialSkinManager.Instance.ColorScheme;
 
@@ -40,7 +37,6 @@ namespace WinFormsApp3
             InitializeStaticLayout();
 
             SetupAnimation();
-
             // Timer starten (200ms = 5 FPS für Text-Updates reicht völlig)
             _refreshTimer = new System.Windows.Forms.Timer { Interval = 200 };
             _refreshTimer.Tick += (s, e) => UpdateUI();
@@ -48,7 +44,6 @@ namespace WinFormsApp3
 
             // Erstes Update sofort erzwingen
             UpdateUI();
-
             this.FormClosing += FrmTransferDetail_FormClosing;
         }
 
@@ -67,7 +62,7 @@ namespace WinFormsApp3
 
         private void InitializeComponent()
         {
-            this.Size = new Size(550, 550);
+            this.Size = new Size(550, 580); // Etwas höher für den Pfad
             this.Sizable = false;
             this.StartPosition = FormStartPosition.CenterParent;
             this.Text = "Transfer Details";
@@ -95,7 +90,7 @@ namespace WinFormsApp3
             btnClose.UseAccentColor = false;
             btnClose.AutoSize = false;
             btnClose.Size = new Size(130, 36);
-            btnClose.Location = new Point(390, 480);
+            btnClose.Location = new Point(390, 510);
             btnClose.Click += (s, e) => this.Close();
             this.Controls.Add(btnClose);
 
@@ -104,7 +99,7 @@ namespace WinFormsApp3
             btnCopy.Type = MaterialButton.MaterialButtonType.Outlined;
             btnCopy.AutoSize = false;
             btnCopy.Size = new Size(130, 36);
-            btnCopy.Location = new Point(250, 480);
+            btnCopy.Location = new Point(250, 510);
             btnCopy.Click += BtnCopy_Click;
             this.Controls.Add(btnCopy);
         }
@@ -114,7 +109,7 @@ namespace WinFormsApp3
             FlowLayoutPanel flowContent = new FlowLayoutPanel();
             flowContent.BackColor = Color.FromArgb(45, 45, 48);
             flowContent.Location = new Point(30, lblHeader.Bottom + 20);
-            flowContent.Size = new Size(490, 220);
+            flowContent.Size = new Size(490, 250);
             flowContent.FlowDirection = FlowDirection.TopDown;
             flowContent.WrapContents = false;
             flowContent.AutoScroll = true;
@@ -128,13 +123,16 @@ namespace WinFormsApp3
             tlp.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
 
             lblValType = AddGridRow(tlp, "Typ", Color.White);
+
+            // NEU: Remote Pfad
+            lblValRemotePath = AddGridRow(tlp, "Server Pfad", Color.Orange);
+
             lblValStatus = AddGridRow(tlp, "Status", Color.White);
             lblValRate = AddGridRow(tlp, "Rate", Color.Cyan);
             lblValProgress = AddGridRow(tlp, "Progress", Color.White);
             lblValStart = AddGridRow(tlp, "Gestartet", Color.White);
 
             flowContent.Controls.Add(tlp);
-
             System.Windows.Forms.Panel line = new System.Windows.Forms.Panel();
             line.Height = 1; line.BackColor = Color.Gray;
             line.Width = flowContent.ClientSize.Width - 40;
@@ -167,6 +165,10 @@ namespace WinFormsApp3
             if (lblHeader.Text != cleanName) lblHeader.Text = ShortenString(cleanName, 40);
 
             lblValType.Text = _item.Type;
+
+            // Update Pfad
+            lblValRemotePath.Text = _item.RemotePath ?? "-";
+
             lblValStatus.Text = _item.Status;
             lblValStatus.ForeColor = GetStatusColor(_item.Status);
             lblValRate.Text = _item.SpeedString;
@@ -175,7 +177,6 @@ namespace WinFormsApp3
 
             // 2. Status prüfen & Theme setzen
             bool isFinished = false;
-
             if (!string.IsNullOrEmpty(_item.ErrorMessage))
             {
                 lblMsg.ForeColor = Color.Orange;
@@ -194,7 +195,6 @@ namespace WinFormsApp3
             {
                 lblMsg.ForeColor = Color.LightBlue;
                 lblMsg.Text = "Übertragung läuft...\nBitte das Fenster nicht schließen.";
-                // Theme für "Running" ist Standard, muss nicht gesetzt werden wenn wir im Konstruktor blau starten
                 if (!_animTimer.Enabled) _animTimer.Start();
             }
 
@@ -202,7 +202,6 @@ namespace WinFormsApp3
             if (isFinished)
             {
                 StopAllTimers();
-                // Sicherstellen, dass das Icon statisch und sauber ist
                 if (picStatus.Image != null)
                 {
                     Bitmap transparentBitmap = new Bitmap(picStatus.Image);
@@ -220,7 +219,6 @@ namespace WinFormsApp3
         }
 
         private string _lastThemeStatus = "";
-
         private void UpdateStatusTheme(string statusType)
         {
             if (_lastThemeStatus == statusType) return;
@@ -270,7 +268,7 @@ namespace WinFormsApp3
 
         private void BtnCopy_Click(object sender, EventArgs e)
         {
-            string content = $"File: {_item.FileName}\nStatus: {_item.Status}\nRate: {_item.SpeedString}\nError: {_item.ErrorMessage ?? "-"}\nID: {_item.Id}";
+            string content = $"File: {_item.FileName}\nStatus: {_item.Status}\nRate: {_item.SpeedString}\nError: {_item.ErrorMessage ?? "-"}\nID: {_item.Id}\nPfad: {_item.RemotePath}";
             Clipboard.SetText(content);
             new MaterialSnackBar("In die Zwischenablage kopiert", 1500).Show(this);
         }

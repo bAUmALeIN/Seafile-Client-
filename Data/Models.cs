@@ -55,9 +55,10 @@ namespace WinFormsApp3.Data
         public string SpeedString { get; set; } = "-";
         public DateTime StartTime { get; set; } = DateTime.Now;
         public string ErrorMessage { get; set; }
-
-        // HIER WAR DER FEHLER: Das fehlte bei dir
         public string LocalFilePath { get; set; }
+
+        // NEU: Zielpfad auf dem Server
+        public string RemotePath { get; set; }
 
         public object Tag { get; set; }
     }

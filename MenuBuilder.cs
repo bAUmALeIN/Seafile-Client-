@@ -21,7 +21,7 @@ namespace WinFormsApp3
             itemDownload.Click += downloadHandler;
 
             // Umbenennen (NEU)
-            ToolStripMenuItem itemRename = new ToolStripMenuItem("Umbenennen") { Name = "ItemRename" };
+            ToolStripMenuItem itemRename = new ToolStripMenuItem("Umbenennen") { Name = "ItemRename", Image = ResizeIcon(Properties.Resources.icon_rename,18,18)};
             // Falls du ein Icon hast: Properties.Resources.icon_rename nutzen
             itemRename.Click += renameHandler;
 
