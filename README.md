@@ -4,7 +4,7 @@
   <img src="Resources/app_logo.png" alt="Seafile Client Logo" width="150">
   <br><br>
   
-  <img src="https://img.shields.io/badge/Version-v1.5.0%20(Beta)-orange?style=flat-square" alt="Version 1.5.0 Beta">
+  <img src="https://img.shields.io/badge/Version-v1.5.0%20-Blue?style=flat-square" alt="Version 1.5.0 Beta">
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 8.0">
   <br><br>
