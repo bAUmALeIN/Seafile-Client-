@@ -16,13 +16,16 @@ namespace WinFormsApp3
 
             ctxMenu.ImageScalingSize = new Size(18, 18);
 
-            // Items erstellen
+            // Herunterladen
             ToolStripMenuItem itemDownload = new ToolStripMenuItem("Herunterladen") { Name = "ItemDownload", Image = ResizeIcon(Properties.Resources.icon_ctx_download, 18, 18) };
             itemDownload.Click += downloadHandler;
 
-            ToolStripMenuItem itemRename = new ToolStripMenuItem("Umbenennen") { Name = "ItemRename", Image = ResizeIcon(Properties.Resources.icon_rename,18,18)};
+            // Umbenennen (NEU)
+            ToolStripMenuItem itemRename = new ToolStripMenuItem("Umbenennen") { Name = "ItemRename" };
+            // Falls du ein Icon hast: Properties.Resources.icon_rename nutzen
             itemRename.Click += renameHandler;
 
+            // Löschen
             ToolStripMenuItem itemDelete = new ToolStripMenuItem("Löschen") { Name = "ItemDelete", Image = ResizeIcon(Properties.Resources.icon_ctx_löschen, 18, 18) };
             itemDelete.Click += deleteHandler;
 

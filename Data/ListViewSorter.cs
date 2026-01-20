@@ -7,8 +7,8 @@ namespace WinFormsApp3.Data
 {
     public class ListViewSorter : IComparer
     {
-        private int _colIndex;
-        private bool _ascending;
+        private readonly int _colIndex;
+        private readonly bool _ascending;
 
         public ListViewSorter(int columnIndex, bool ascending)
         {
@@ -23,17 +23,15 @@ namespace WinFormsApp3.Data
 
             if (itemX == null || itemY == null) return 0;
 
-            // "Zurück" (..) immer ganz oben halten
-            if (itemX.Tag is SeafileEntry eX && eX.type == "back") return -1;
-            if (itemY.Tag is SeafileEntry eY && eY.type == "back") return 1;
+            // REGEL 1: Der "Zurück" (..) Button bleibt IMMER ganz oben
+            if (itemX.Tag is SeafileEntry eX_Back && eX_Back.type == "back") return -1;
+            if (itemY.Tag is SeafileEntry eY_Back && eY_Back.type == "back") return 1;
 
             int result = 0;
+            object tagX = itemX.Tag;
+            object tagY = itemY.Tag;
 
-            // Daten aus dem Tag holen (Sauberer als Text-Parsing!)
-            var tagX = itemX.Tag;
-            var tagY = itemY.Tag;
-
-            // Fall 1: Wir sind in einer Bibliothek (SeafileEntry Objekte)
+            // Fall A: Wir sortieren Dateien/Ordner (SeafileEntry)
             if (tagX is SeafileEntry entryX && tagY is SeafileEntry entryY)
             {
                 switch (_colIndex)
@@ -44,21 +42,25 @@ namespace WinFormsApp3.Data
                         if (entryX.type != "dir" && entryY.type == "dir") return 1;
                         result = string.Compare(entryX.name, entryY.name, StringComparison.OrdinalIgnoreCase);
                         break;
+
                     case 1: // Größe
                         result = entryX.size.CompareTo(entryY.size);
                         break;
-                    case 2: // Geändert (Datum)
+
+                    case 2: // Geändert
                         result = entryX.mtime.CompareTo(entryY.mtime);
                         break;
+
                     case 3: // Typ
                         result = string.Compare(entryX.type, entryY.type, StringComparison.OrdinalIgnoreCase);
                         break;
+
                     default:
                         result = string.Compare(itemX.SubItems[_colIndex].Text, itemY.SubItems[_colIndex].Text);
                         break;
                 }
             }
-            // Fall 2: Wir sind im Root (SeafileRepo Objekte)
+            // Fall B: Wir sortieren Bibliotheken (SeafileRepo)
             else if (tagX is SeafileRepo repoX && tagY is SeafileRepo repoY)
             {
                 switch (_colIndex)
@@ -72,20 +74,23 @@ namespace WinFormsApp3.Data
                     case 2: // Geändert
                         result = repoX.mtime.CompareTo(repoY.mtime);
                         break;
-                    case 3: // Owner
-                        result = string.Compare(repoX.owner, repoY.owner, StringComparison.OrdinalIgnoreCase);
+                    default:
+                        // Fallback Text
+                        string tX = itemX.SubItems.Count > _colIndex ? itemX.SubItems[_colIndex].Text : "";
+                        string tY = itemY.SubItems.Count > _colIndex ? itemY.SubItems[_colIndex].Text : "";
+                        result = string.Compare(tX, tY);
                         break;
                 }
             }
-            // Fallback: Textvergleich
             else
             {
-                string textX = itemX.SubItems.Count > _colIndex ? itemX.SubItems[_colIndex].Text : "";
-                string textY = itemY.SubItems.Count > _colIndex ? itemY.SubItems[_colIndex].Text : "";
-                result = string.Compare(textX, textY);
+                // Fallback: Einfacher Textvergleich
+                string txtX = itemX.SubItems.Count > _colIndex ? itemX.SubItems[_colIndex].Text : "";
+                string txtY = itemY.SubItems.Count > _colIndex ? itemY.SubItems[_colIndex].Text : "";
+                result = string.Compare(txtX, txtY);
             }
 
-            // Richtung umkehren wenn absteigend
+            // Bei Absteigend das Ergebnis umkehren
             return _ascending ? result : -result;
         }
     }

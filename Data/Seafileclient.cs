@@ -63,7 +63,7 @@ namespace WinFormsApp3.Data
             }
         }
 
-        
+        // HIER WAR DER FEHLER: Diese Methode fehlte
         public async Task<bool> RenameEntryAsync(string repoId, string path, bool isDir, string newName)
         {
             var content = new FormUrlEncodedContent(new[]

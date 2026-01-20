@@ -21,6 +21,8 @@ namespace WinFormsApp3
         private FlowLayoutPanel _flowPath;
         private ImageList _repoIcons;
         private PictureBox _appIcon;
+
+        // V1.4 Variables
         private TextBox _txtSearch;
         private ToolTip _actionToolTip;
 
@@ -200,7 +202,7 @@ namespace WinFormsApp3
 
         private void InitializeCustomUI()
         {
-            // CONTEXT MENU (File Browser)
+            // Context Menu mit Rename
             ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click, CtxRename_Click);
             ToolStripMenuItem itemJump = new ToolStripMenuItem("Gehe zu") { Name = "ItemJump", Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_jump, 16, 16) };
             itemJump.Click += CtxJumpTo_Click;
@@ -220,6 +222,10 @@ namespace WinFormsApp3
             lstRepos.DoubleClick += lstRepos_DoubleClick;
             lstRepos.SizeChanged += (s, e) => UiHelper.UpdateColumnWidths(lstRepos);
 
+            // SORTIEREN (V1.4)
+            lstRepos.ColumnClick += LstRepos_ColumnClick;
+
+            // DRAG & DROP
             lstRepos.AllowDrop = true;
             lstRepos.ItemDrag += lstRepos_ItemDrag;
             lstRepos.DragEnter += LstRepos_DragEnter;
@@ -227,7 +233,7 @@ namespace WinFormsApp3
             lstRepos.DragDrop += LstRepos_DragDrop;
             lstRepos.GiveFeedback += lstRepos_GiveFeedback;
             lstRepos.DragLeave += LstRepos_DragLeave;
-            lstRepos.ColumnClick += LstRepos_ColumnClick;
+
             ReplaceMaterialButtonsWithStandard();
             try
             {
@@ -235,7 +241,7 @@ namespace WinFormsApp3
             }
             catch { }
 
-            // CONTEXT MENU (Transfer List)
+            // TRANSFER MENU
             SetupTransferContextMenu();
         }
 
@@ -247,7 +253,6 @@ namespace WinFormsApp3
 
             if (actionPanel == null) return;
 
-            // Aufräumen
             var toRemove = actionPanel.Controls.OfType<Control>()
                 .Where(c => c is MaterialButton || c.Name.StartsWith("materialButton") || c.Name == "btnLogout" || c.Name == "btnSettings" || c.Name == "btnSearch" || c is System.Windows.Forms.Button || c is TextBox || c.Name == "pnlSearchContainer")
                 .ToList();
@@ -255,7 +260,6 @@ namespace WinFormsApp3
 
             actionPanel.BackColor = Color.FromArgb(45, 45, 48);
 
-            // Logo Check
             if (_appIcon != null)
             {
                 _appIcon.Parent = actionPanel;
@@ -264,26 +268,21 @@ namespace WinFormsApp3
                 _appIcon.BringToFront();
             }
 
-            // ToolTip Initialisierung (FIX)
             if (_actionToolTip == null)
             {
                 _actionToolTip = new ToolTip();
                 _actionToolTip.AutoPopDelay = 5000;
-                _actionToolTip.InitialDelay = 500;  // Zeigt sich nach 0.5 Sek
+                _actionToolTip.InitialDelay = 500;
                 _actionToolTip.ReshowDelay = 200;
-                _actionToolTip.ShowAlways = true;   // Wichtig!
+                _actionToolTip.ShowAlways = true;
             }
-            _actionToolTip.RemoveAll(); // Alte Bindungen löschen, falls Methode neu aufgerufen wird
+            _actionToolTip.RemoveAll();
 
             int leftX = (_appIcon != null) ? _appIcon.Right + 15 : 10;
             int btnY = 12;
             int rightEdge = actionPanel.Width - 10;
 
-            // ---------------------------------------------------------
-            // RECHTE SEITE (Settings -> Logout -> Suche)
-            // ---------------------------------------------------------
-
-            // 1. SETTINGS
+            // RECHTS
             System.Windows.Forms.Button btnSettings = CreateFlatButton("", Properties.Resources.icon_settings);
             btnSettings.Text = "";
             btnSettings.Width = 40;
@@ -291,10 +290,9 @@ namespace WinFormsApp3
             btnSettings.Location = new Point(rightEdge - btnSettings.Width, btnY);
             btnSettings.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnSettings.Click += (s, e) => new FrmSettings().ShowDialog();
-            _actionToolTip.SetToolTip(btnSettings, "Einstellungen"); // FIX
+            _actionToolTip.SetToolTip(btnSettings, "Einstellungen");
             actionPanel.Controls.Add(btnSettings);
 
-            // 2. LOGOUT
             System.Windows.Forms.Button btnOut = CreateFlatButton("", Properties.Resources.icon_logout);
             btnOut.Text = "";
             btnOut.Width = 40;
@@ -302,10 +300,10 @@ namespace WinFormsApp3
             btnOut.Location = new Point(btnSettings.Left - 5 - btnOut.Width, btnY);
             btnOut.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             btnOut.Click += btnLogout_Click;
-            _actionToolTip.SetToolTip(btnOut, "Abmelden"); // FIX
+            _actionToolTip.SetToolTip(btnOut, "Abmelden");
             actionPanel.Controls.Add(btnOut);
 
-            // 3. SEARCH CONTAINER
+            // SEARCH CONTAINER (Hier war der Panel Fehler -> System.Windows.Forms.Panel fixt es)
             System.Windows.Forms.Panel pnlSearch = new System.Windows.Forms.Panel();
             pnlSearch.Name = "pnlSearchContainer";
             pnlSearch.BackColor = Color.FromArgb(60, 60, 65);
@@ -341,20 +339,17 @@ namespace WinFormsApp3
 
             pnlSearch.Controls.Add(picSearch);
             pnlSearch.Controls.Add(_txtSearch);
-            _actionToolTip.SetToolTip(pnlSearch, "Tippen & Enter drücken"); // Optional: Tooltip für Suche
+            _actionToolTip.SetToolTip(pnlSearch, "Tippen & Enter drücken");
             _actionToolTip.SetToolTip(picSearch, "Suche starten");
             actionPanel.Controls.Add(pnlSearch);
 
-            // ---------------------------------------------------------
-            // LINKE SEITE (Neu, Löschen)
-            // ---------------------------------------------------------
-
+            // LINKS
             System.Windows.Forms.Button btnNew = CreateFlatButton("NEU", Properties.Resources.icon_new);
             btnNew.Name = "btnNew";
             btnNew.Location = new Point(leftX, btnY);
             btnNew.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             btnNew.Click += BtnNew_Click;
-            _actionToolTip.SetToolTip(btnNew, "Neue Bibliothek oder Ordner erstellen"); // FIX
+            _actionToolTip.SetToolTip(btnNew, "Neue Bibliothek oder Ordner erstellen");
             actionPanel.Controls.Add(btnNew);
 
             System.Windows.Forms.Button btnDel = CreateFlatButton("LÖSCHEN", Properties.Resources.icon_delete);
@@ -362,20 +357,8 @@ namespace WinFormsApp3
             btnDel.Location = new Point(btnNew.Right + 10, btnY);
             btnDel.Anchor = AnchorStyles.Top | AnchorStyles.Left;
             btnDel.Click += BtnDelete_Click;
-            _actionToolTip.SetToolTip(btnDel, "Markierte Elemente löschen"); // FIX
+            _actionToolTip.SetToolTip(btnDel, "Markierte Elemente löschen");
             actionPanel.Controls.Add(btnDel);
-        }
-
-        //LEGACY -> Bleibt erstmal drin 
-        private TextBox CreateFlatTextBox()
-        {
-            TextBox txt = new TextBox();
-            txt.BackColor = Color.FromArgb(60, 60, 65);
-            txt.ForeColor = Color.WhiteSmoke;
-            txt.BorderStyle = BorderStyle.FixedSingle;
-            txt.Font = new Font("Segoe UI", 10F);
-            txt.PlaceholderText = "Suchen..."; // Modernes Feature (WinForms .NET Core/5+)
-            return txt;
         }
 
         private System.Windows.Forms.Button CreateFlatButton(string text, Image icon)

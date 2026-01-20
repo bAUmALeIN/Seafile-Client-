@@ -23,6 +23,8 @@ namespace WinFormsApp3
         private CancellationTokenSource _thumbnailCts;
         private System.Windows.Forms.Timer _refreshDebounceTimer;
         private Cursor _dragCursor = null;
+
+        // V1.4 Variables: Sortier-Status merken
         private int _sortColumn = -1;
         private bool _sortAscending = true;
 
@@ -304,11 +306,28 @@ namespace WinFormsApp3
             return false;
         }
 
-        private async void btnSearch_Click(object sender, EventArgs e)
+        // --- HANDLER FÜR SUCHE (ENTER KEY) ---
+        private async void TxtSearch_KeyDown(object sender, KeyEventArgs e)
         {
-            string searchTerm = UiHelper.ShowInputDialog("Globale Suche", "Suchbegriff:");
-            if (string.IsNullOrWhiteSpace(searchTerm)) { await LadeInhalt(); return; }
+            if (e.KeyCode == Keys.Enter)
+            {
+                e.SuppressKeyPress = true; // "Ping" verhindern
+                string term = _txtSearch.Text.Trim();
 
+                if (string.IsNullOrWhiteSpace(term))
+                {
+                    await LadeInhalt();
+                    return;
+                }
+                PerformSearch(term);
+            }
+        }
+
+        // Dummy für alte Referenzen, kann ignoriert werden
+        private void btnSearch_Click(object sender, EventArgs e) { }
+
+        private async void PerformSearch(string searchTerm)
+        {
             lstRepos.Visible = false;
             lstRepos.Items.Clear(); lstRepos.Groups.Clear(); lstRepos.ShowGroups = true;
             try
@@ -421,6 +440,7 @@ namespace WinFormsApp3
                 }
         }
 
+        // --- HANDLER FÜR RENAME ---
         private async void CtxRename_Click(object sender, EventArgs e)
         {
             if (lstRepos.SelectedItems.Count != 1) return;
@@ -452,7 +472,6 @@ namespace WinFormsApp3
                     {
                         _cacheManager.Clear();
                         await LadeInhalt();
-                        // FEEDBACK HIER:
                         new MaterialSnackBar("Erfolgreich umbenannt", "OK", true).Show(this);
                     }
                 }
@@ -523,6 +542,24 @@ namespace WinFormsApp3
             }
         }
 
+        // --- HANDLER FÜR SORTIEREN ---
+        private void LstRepos_ColumnClick(object sender, ColumnClickEventArgs e)
+        {
+            if (e.Column != _sortColumn)
+            {
+                _sortColumn = e.Column;
+                _sortAscending = true;
+            }
+            else
+            {
+                _sortAscending = !_sortAscending;
+            }
+
+            lstRepos.ListViewItemSorter = new ListViewSorter(e.Column, _sortAscending);
+            lstRepos.Sort();
+        }
+
+        // --- HANDLER FÜR TRANSFER MENU (Clear List / Show in Folder) ---
         private void SetupTransferContextMenu()
         {
             ContextMenuStrip ctxTransfer = new ContextMenuStrip();
@@ -751,114 +788,6 @@ namespace WinFormsApp3
         private void _lstDownloads_DoubleClick(object sender, EventArgs e)
         {
             if (_lstDownloads.SelectedItems.Count > 0 && _lstDownloads.SelectedItems[0].Tag is DownloadItem item) new FrmTransferDetail(item).ShowDialog();
-        }
-
-        private void LstRepos_ColumnClick(object sender, ColumnClickEventArgs e)
-        {
-            // Toggle Logic: Wenn gleiche Spalte geklickt -> Richtung umkehren
-            if (e.Column != _sortColumn)
-            {
-                _sortColumn = e.Column;
-                _sortAscending = true;
-            }
-            else
-            {
-                _sortAscending = !_sortAscending;
-            }
-
-            // Sortierer setzen
-            lstRepos.ListViewItemSorter = new ListViewSorter(e.Column, _sortAscending);
-            lstRepos.Sort();
-
-            // Optional: Gruppen-Modus beachten. 
-            // Wenn wir in "Bibliotheken" (Root) sind, sortiert ListView nur INNERHALB der Gruppen.
-            // Das ist das Standard-Verhalten von WinForms und meistens gewünscht.
-        }
-
-        // 4. Neue Methode: TxtSearch_KeyDown (Such-Logik)
-        private async void TxtSearch_KeyDown(object sender, KeyEventArgs e)
-        {
-            if (e.KeyCode == Keys.Enter)
-            {
-                e.SuppressKeyPress = true; // "Ping"-Sound verhindern
-                string term = _txtSearch.Text.Trim();
-
-                if (string.IsNullOrWhiteSpace(term))
-                {
-                    // Reset wenn leer
-                    await LadeInhalt();
-                    return;
-                }
-
-                // Suche auslösen (Code von btnSearch_Click adaptiert)
-                // Wir rufen einfach die Logik auf, die wir schon hatten
-                PerformSearch(term);
-            }
-        }
-
-        private async void PerformSearch(string searchTerm)
-        {
-            lstRepos.Visible = false;
-            lstRepos.Items.Clear();
-            lstRepos.Groups.Clear();
-            lstRepos.ShowGroups = true;
-
-            try
-            {
-                lblStatus.Text = "Suche läuft...";
-                UpdateBreadcrumbs("Suche: " + searchTerm);
-
-                // ... (Der restliche Code aus der alten btnSearch_Click Methode hier rein) ...
-                var allRepos = await _seafileClient.GetLibrariesAsync();
-                var searchResults = new ConcurrentBag<ListViewItem>();
-                var groups = new ConcurrentDictionary<string, ListViewGroup>();
-                var searchTasks = new List<Task>();
-
-                foreach (var repo in allRepos)
-                {
-                    searchTasks.Add(Task.Run(async () =>
-                    {
-                        try
-                        {
-                            var entries = await _seafileClient.GetAllFilesRecursiveAsync(repo.id);
-                            var matches = entries.Where(x => x.name.ToLower().Contains(searchTerm.ToLower())).ToList();
-                            if (matches.Count > 0)
-                            {
-                                var grp = new ListViewGroup(repo.name, HorizontalAlignment.Left);
-                                groups.TryAdd(repo.id, grp);
-                                foreach (var entry in matches)
-                                {
-                                    string path = (entry.parent_dir ?? "/") + entry.name;
-                                    path = path.Replace("//", "/");
-                                    var item = new ListViewItem($"[{repo.name}] {path}", entry.type == "dir" ? "dir" : "file");
-                                    item.SubItems.Add(entry.type == "dir" ? "-" : UiHelper.FormatByteSize(entry.size));
-                                    item.SubItems.Add(FormatDate(entry.mtime));
-                                    item.SubItems.Add(entry.type);
-                                    item.Tag = new Tuple<string, SeafileEntry>(repo.id, entry);
-                                    item.Group = grp;
-                                    searchResults.Add(item);
-                                }
-                            }
-                        }
-                        catch { }
-                    }));
-                }
-                await Task.WhenAll(searchTasks);
-                lstRepos.BeginUpdate();
-                lstRepos.Groups.AddRange(groups.Values.OrderBy(g => g.Header).ToArray());
-                lstRepos.Items.AddRange(searchResults.ToArray());
-            }
-            catch (Exception ex)
-            {
-                UiHelper.ShowErrorDialog("Fehler", ex.Message);
-            }
-            finally
-            {
-                lstRepos.EndUpdate();
-                lstRepos.Visible = true;
-                lblStatus.Text = "Suche beendet.";
-                UiHelper.UpdateColumnWidths(lstRepos);
-            }
         }
 
         private string FormatDate(long timestamp) => timestamp == 0 ? "-" : DateTimeOffset.FromUnixTimeSeconds(timestamp).ToLocalTime().ToString("g");
