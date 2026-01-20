@@ -20,6 +20,7 @@ namespace WinFormsApp3.Data
 
         public event Action<DownloadItem> OnItemUpdated;
         public event Action<DownloadItem> OnDownloadStarted;
+        public event Action OnTransferFinished;
 
         public DownloadManager(SeafileClient client)
         {
@@ -456,8 +457,13 @@ namespace WinFormsApp3.Data
                     UiHelper.ShowScrollableErrorDialog("Transfer-Fehler", $"Objekt: {item.FileName}\n\nFehler: {ex.Message}");
                 }
             }
-        }
+            finally
+            {
+                OnTransferFinished?.Invoke();
 
+            }
+        }
+        
         private string GetSavePathOnMainThread(string defaultName, string filter)
         {
             string savePath = null;

@@ -8,7 +8,6 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 using WinFormsApp3.Data;
-using System.Drawing.Imaging; // Wichtig für Bild-Bearbeitung
 
 namespace WinFormsApp3
 {
@@ -16,8 +15,7 @@ namespace WinFormsApp3
     {
         public FrmAbout()
         {
-            // WICHTIG: Das Form muss beim Manager angemeldet werden, 
-            // sonst wird der Hintergrund nicht dunkel gefärbt!
+            // Skin Manager registrieren für Dark Mode Hintergrund
             MaterialSkinManager.Instance.AddFormToManage(this);
 
             InitializeComponentUI();
@@ -26,22 +24,22 @@ namespace WinFormsApp3
 
         private void InitializeComponentUI()
         {
-            this.Size = new Size(550, 650);
+            this.Size = new Size(550, 680); // Etwas höher für mehr "Luft"
             this.StartPosition = FormStartPosition.CenterParent;
             this.Text = "Über & Debug";
             this.Sizable = false;
 
-            // 1. Großes Logo (Mit "Fuzzy"-Transparenz für unsaubere Ränder)
+            int centerX = this.Width / 2;
+
+            // 1. LOGO
             PictureBox pbLogo = new PictureBox();
             pbLogo.Size = new Size(130, 130);
             pbLogo.SizeMode = PictureBoxSizeMode.Zoom;
-            pbLogo.Location = new Point((this.Width - pbLogo.Width) / 2, 80);
+            pbLogo.Location = new Point(centerX - (pbLogo.Width / 2), 80);
 
             try
             {
-                // Original laden
                 Bitmap original = new Bitmap(Properties.Resources.app_logo);
-                // Intelligente Transparenz anwenden (entfernt auch hellgraue Pixel)
                 pbLogo.Image = RemoveWhiteBackground(original);
             }
             catch
@@ -50,64 +48,70 @@ namespace WinFormsApp3
             }
             this.Controls.Add(pbLogo);
 
-            // 2. Banner (Blau hinterlegt)
+            // 2. TITEL (Blauer Banner)
             Label lblTitle = new Label();
             lblTitle.Text = "BBS-ME Seafile Client";
             lblTitle.Font = new Font("Segoe UI", 16f, FontStyle.Bold);
             lblTitle.ForeColor = Color.White;
-
-            // Holt sich das exakte Blau vom aktuellen Theme
             lblTitle.BackColor = MaterialSkinManager.Instance.ColorScheme.PrimaryColor;
-
             lblTitle.AutoSize = false;
-            lblTitle.Size = new Size(300, 40);
-            lblTitle.Location = new Point((this.Width - 300) / 2, pbLogo.Bottom + 15);
+            lblTitle.Size = new Size(320, 45); // Etwas breiter und höher
+            lblTitle.Location = new Point(centerX - (lblTitle.Width / 2), pbLogo.Bottom + 20); // Mehr Abstand zum Logo
             lblTitle.TextAlign = ContentAlignment.MiddleCenter;
             this.Controls.Add(lblTitle);
 
-            // 3. Version (Hintergrund Transparent machen!)
+            // 3. VERSION
             Label lblVer = new Label();
             lblVer.Text = "Version v1.5 (Unofficial)";
             lblVer.Font = new Font("Segoe UI", 10f);
             lblVer.ForeColor = Color.Gray;
-            // FIX: Damit scheint der dunkle Hintergrund durch
             lblVer.BackColor = Color.Transparent;
-
             lblVer.AutoSize = false;
             lblVer.Size = new Size(this.Width, 25);
             lblVer.TextAlign = ContentAlignment.MiddleCenter;
-            lblVer.Location = new Point(0, lblTitle.Bottom + 5);
+            lblVer.Location = new Point(0, lblTitle.Bottom + 8);
             this.Controls.Add(lblVer);
 
-            // 4. Debug Box
+            // 4. FOOTER (NEU!)
+            Label lblFooter = new Label();
+            lblFooter.Text = "Entwickelt mit ❤️ und C# für die Community der BBS Me.";
+            lblFooter.Font = new Font("Segoe UI", 9f, FontStyle.Regular); // Etwas feiner
+            lblFooter.ForeColor = Color.WhiteSmoke; // Helles Grau/Weiß
+            lblFooter.BackColor = Color.Transparent;
+            lblFooter.AutoSize = false;
+            lblFooter.Size = new Size(this.Width, 25);
+            lblFooter.TextAlign = ContentAlignment.MiddleCenter;
+            lblFooter.Location = new Point(0, lblVer.Bottom + 2); // Nah an der Version
+            this.Controls.Add(lblFooter);
+
+            // 5. DEBUG BOX
             RichTextBox rtbDebug = new RichTextBox();
             rtbDebug.Name = "rtbDebug";
             rtbDebug.BackColor = Color.FromArgb(40, 40, 40);
             rtbDebug.BorderStyle = BorderStyle.None;
-            rtbDebug.Location = new Point(40, lblVer.Bottom + 20);
-            rtbDebug.Size = new Size(470, 280);
+            // Positioniert relativ zum Footer mit Abstand
+            rtbDebug.Location = new Point(40, lblFooter.Bottom + 25);
+            rtbDebug.Size = new Size(470, 260);
             rtbDebug.ReadOnly = true;
             rtbDebug.Cursor = Cursors.Default;
             rtbDebug.ScrollBars = RichTextBoxScrollBars.None;
             rtbDebug.Font = new Font("Consolas", 9f);
             this.Controls.Add(rtbDebug);
 
-            // 5. Close Button
+            // 6. SCHLIESSEN BUTTON
             MaterialButton btnClose = new MaterialButton();
             btnClose.Text = "SCHLIESSEN";
             btnClose.AutoSize = false;
             btnClose.Size = new Size(200, 36);
-            btnClose.Location = new Point((this.Width - 200) / 2, rtbDebug.Bottom + 20);
+            btnClose.Location = new Point(centerX - (btnClose.Width / 2), rtbDebug.Bottom + 20);
             btnClose.Click += (s, e) => this.Close();
             this.Controls.Add(btnClose);
         }
 
-        // --- NEU: INTELLIGENTE TRANSPARENZ ---
-        // Entfernt alles was weiß oder fast weiß ist (Threshold)
+        // --- Helper: Weiß entfernen ---
         private Bitmap RemoveWhiteBackground(Bitmap bmp)
         {
             Bitmap result = new Bitmap(bmp.Width, bmp.Height);
-            // Toleranz-Wert: Je niedriger, desto strenger (230 ist gut für JPG-Artefakte)
             int threshold = 230;
 
             for (int y = 0; y < bmp.Height; y++)
@@ -115,17 +119,10 @@ namespace WinFormsApp3
                 for (int x = 0; x < bmp.Width; x++)
                 {
                     Color pixel = bmp.GetPixel(x, y);
-                    // Prüfen ob der Pixel hell ist (R, G und B > Threshold)
                     if (pixel.R > threshold && pixel.G > threshold && pixel.B > threshold)
-                    {
-                        // Mach ihn transparent
                         result.SetPixel(x, y, Color.Transparent);
-                    }
                     else
-                    {
-                        // Behalte Originalfarbe
                         result.SetPixel(x, y, pixel);
-                    }
                 }
             }
             return result;

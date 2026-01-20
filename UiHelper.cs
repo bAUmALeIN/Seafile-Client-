@@ -24,7 +24,13 @@ namespace WinFormsApp3
             listView.FullRowSelect = true;
             listView.GridLines = false;
             listView.Font = new Font("Segoe UI", 11f);
+
+            // --- FIX START: Hintergrund "hart" setzen ---
+            // Das verhindert das weiße Aufblitzen oder Quadrate in leeren Bereichen
             listView.BackColor = Color.FromArgb(50, 50, 50);
+            listView.ForeColor = Color.WhiteSmoke;
+            // --- FIX ENDE ---
+
             if (customIcons != null) listView.SmallImageList = customIcons;
 
             int hoveredIndex = -1;
@@ -128,18 +134,34 @@ namespace WinFormsApp3
         public static void UpdateColumnWidths(MaterialListView listView)
         {
             if (listView.Columns.Count < 2 || listView.ClientSize.Width <= 0) return;
+
             int fixedWidths = 0;
+            // Summiere alle Spalten außer der ersten (Name)
             for (int i = 1; i < listView.Columns.Count; i++) fixedWidths += listView.Columns[i].Width;
-            int avail = listView.ClientSize.Width - fixedWidths;
+
+            // FIX: -4 Pixel Puffer abziehen, damit die horizontale Scrollbar nicht triggert
+            int avail = listView.ClientSize.Width - fixedWidths - 4;
+
             if (avail > 50) listView.Columns[0].Width = avail;
         }
 
         public static void UpdateTransferColumnWidths(MaterialListView listView)
         {
-            if (listView.Columns.Count < 4 || listView.ClientSize.Width == 0) return;
-            int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width;
+            // Spaltenindexe: 0=Datei, 1=Status, 2=Rate, 3=Progress, 4=Startzeit
+            if (listView.Columns.Count < 5 || listView.ClientSize.Width == 0) return;
+
+            // Wir wollen, dass Spalte 0 (Name) und Spalte 1 (Status) sich den Platz teilen,
+            // aber hier im Code war Spalte 1 (Status) die flexible.
+            // Lass uns Spalte 0 (Datei) zur flexiblen machen, das sieht meist besser aus.
+            // ODER wir reparieren deine Logik für Spalte 1. Ich bleibe bei deinem Design (Spalte 1 flexibel):
+
+            int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width + listView.Columns[4].Width;
+
+            // FIX: Wir nehmen ClientSize.Width (das berücksichtigt die vertikale Scrollleiste bereits automatisch!)
+            // und ziehen einfach pauschal 4 Pixel ab als "Angst-Puffer".
+            // Die manuelle Berechnung mit SystemInformation.VerticalScrollBarWidth ist fehleranfällig und wurde entfernt.
             int availableWidth = listView.ClientSize.Width - fixedWidth - 4;
-            if (listView.Items.Count * 25 > listView.ClientSize.Height) availableWidth -= SystemInformation.VerticalScrollBarWidth;
+
             if (availableWidth > 50) listView.Columns[1].Width = availableWidth;
         }
 

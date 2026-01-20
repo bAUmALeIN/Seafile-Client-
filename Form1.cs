@@ -42,8 +42,22 @@ namespace WinFormsApp3
             _cacheManager = new CacheManager();
             _seafileClient = new SeafileClient(_authToken);
             _downloadManager = new DownloadManager(_seafileClient);
+
+            // UI Events verbinden
             _downloadManager.OnDownloadStarted += AddDownloadToUi;
             _downloadManager.OnItemUpdated += UpdateDownloadInUi;
+
+            // NEU: Wenn ein Transfer fertig ist (finally block), Timer für Refresh starten
+            _downloadManager.OnTransferFinished += () =>
+            {
+                // Wir nutzen Invoke, da das Event aus einem Background-Thread kommen kann
+                this.Invoke(new Action(() =>
+                {
+                    // Timer neustarten (Debounce), damit wir nicht spammen
+                    _refreshDebounceTimer.Stop();
+                    _refreshDebounceTimer.Start();
+                }));
+            };
         }
 
         private void SetupRefreshTimer()

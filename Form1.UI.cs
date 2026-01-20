@@ -138,7 +138,10 @@ namespace WinFormsApp3
                 FullRowSelect = true,
                 OwnerDraw = true,
                 View = View.Details,
-                BackColor = background
+                // FIX: Farbe hier direkt setzen
+                BackColor = Color.FromArgb(50, 50, 50),
+                ForeColor = Color.White,
+                MultiSelect = true // Wichtig auch hier!
             };
             _lstDownloads.Columns.Add("Datei / Ordner", 400);
             _lstDownloads.Columns.Add("Status", 200);
@@ -229,6 +232,13 @@ namespace WinFormsApp3
             lstRepos.ContextMenuStrip = ctxMenu;
 
             UiHelper.SetupListView(lstRepos, _repoIcons);
+
+            // --- FIX START: MultiSelect & Farben erzwingen ---
+            lstRepos.MultiSelect = true; // BUG FIX: Erlaubt mehr als 2 Items
+            lstRepos.BackColor = Color.FromArgb(50, 50, 50); // BUG FIX: Weißes Quadrat entfernen
+            lstRepos.ForeColor = Color.White;
+            // --- FIX ENDE ---
+
             lstRepos.Columns.Clear();
             lstRepos.Columns.Add("Name", 400);
             lstRepos.Columns.Add("Größe", 90);
