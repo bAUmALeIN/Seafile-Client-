@@ -211,7 +211,7 @@ namespace WinFormsApp3
 
         private void InitializeCustomUI()
         {
-            ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click, CtxRename_Click);
+            ContextMenuStrip ctxMenu = MenuBuilder.CreateContextMenu(CtxDownload_Click, BtnDelete_Click, CtxRename_Click, CtxShare_Click);
             ToolStripMenuItem itemJump = new ToolStripMenuItem("Gehe zu") { Name = "ItemJump", Image = MenuBuilder.ResizeIcon(Properties.Resources.icon_ctx_jump, 16, 16) };
             itemJump.Click += CtxJumpTo_Click;
             ctxMenu.Items.Insert(0, new ToolStripSeparator());

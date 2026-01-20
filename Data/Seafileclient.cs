@@ -321,6 +321,44 @@ namespace WinFormsApp3.Data
             if (!resp.IsSuccessStatusCode) throw new Exception($"API Error ({resp.StatusCode}): {content}");
             return content;
         }
+
+        public async Task<string> CreateShareLinkAsync(string repoId, string path, string password = null, int expireDays = 0)
+        {
+            // Der Pfad muss mit / beginnen, aber darf nicht nur / sein (außer Root, aber Root-Share ist oft gesperrt)
+            if (!path.StartsWith("/")) path = "/" + path;
+
+            var formContent = new MultipartFormDataContent();
+            formContent.Add(new StringContent(repoId), "repo_id");
+            formContent.Add(new StringContent(path), "path");
+
+            // Optional: Passwortschutz
+            if (!string.IsNullOrEmpty(password))
+            {
+                formContent.Add(new StringContent(password), "password");
+            }
+
+            // Optional: Ablaufdatum
+            if (expireDays > 0)
+            {
+                formContent.Add(new StringContent(expireDays.ToString()), "expire_days");
+            }
+
+            var req = new HttpRequestMessage(HttpMethod.Post, "api/v2.1/share-links/") { Content = formContent };
+            InjectBrowserHeaders(req);
+
+            var response = await _apiClient.SendAsync(req);
+            string json = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                throw new Exception($"Fehler beim Erstellen des Links: {response.StatusCode}\n{json}");
+            }
+
+            // JSON parsen: {"link": "https://seafile...", ...}
+            var obj = JObject.Parse(json);
+            return obj["link"]?.ToString();
+        }
+
     }
 
     public class ManualMultipartContent : HttpContent
@@ -363,5 +401,7 @@ namespace WinFormsApp3.Data
             await stream.WriteAsync(_tail, 0, _tail.Length);
             _progress?.Invoke(_totalSize, _totalSize);
         }
+
+       
     }
 }

@@ -6,23 +6,30 @@ namespace WinFormsApp3
 {
     public static class MenuBuilder
     {
-        public static ContextMenuStrip CreateContextMenu(EventHandler downloadHandler, EventHandler deleteHandler, EventHandler renameHandler)
+        public static ContextMenuStrip CreateContextMenu(EventHandler downloadHandler, EventHandler deleteHandler, EventHandler renameHandler, EventHandler shareHandler)
         {
             ContextMenuStrip ctxMenu = new ContextMenuStrip();
             ctxMenu.RenderMode = ToolStripRenderMode.Professional;
             ctxMenu.BackColor = Color.FromArgb(40, 40, 40);
             ctxMenu.ForeColor = Color.WhiteSmoke;
             ctxMenu.Renderer = new ToolStripProfessionalRenderer(new DarkColorTable());
-
             ctxMenu.ImageScalingSize = new Size(18, 18);
 
             // Herunterladen
             ToolStripMenuItem itemDownload = new ToolStripMenuItem("Herunterladen") { Name = "ItemDownload", Image = ResizeIcon(Properties.Resources.icon_ctx_download, 18, 18) };
             itemDownload.Click += downloadHandler;
 
-            // Umbenennen (NEU)
-            ToolStripMenuItem itemRename = new ToolStripMenuItem("Umbenennen") { Name = "ItemRename", Image = ResizeIcon(Properties.Resources.icon_rename,18,18)};
-            // Falls du ein Icon hast: Properties.Resources.icon_rename nutzen
+            // Freigeben (NEU)
+            // HINWEIS: Stelle sicher, dass du 'icon_share' in den Ressourcen hast!
+            // Falls nicht, nimm vorerst null oder ein anderes Icon.
+            Image shareIcon = null;
+            try { shareIcon = ResizeIcon(Properties.Resources.icon_share, 18, 18); } catch { }
+
+            ToolStripMenuItem itemShare = new ToolStripMenuItem("Freigeben") { Name = "ItemShare", Image = shareIcon };
+            itemShare.Click += shareHandler;
+
+            // Umbenennen
+            ToolStripMenuItem itemRename = new ToolStripMenuItem("Umbenennen") { Name = "ItemRename", Image = ResizeIcon(Properties.Resources.icon_rename, 18, 18) };
             itemRename.Click += renameHandler;
 
             // Löschen
@@ -31,8 +38,9 @@ namespace WinFormsApp3
 
             // Zusammenbauen
             ctxMenu.Items.Add(itemDownload);
-            ctxMenu.Items.Add(itemRename);
+            ctxMenu.Items.Add(itemShare); // <-- Hier eingefügt
             ctxMenu.Items.Add(new ToolStripSeparator());
+            ctxMenu.Items.Add(itemRename);
             ctxMenu.Items.Add(itemDelete);
 
             return ctxMenu;

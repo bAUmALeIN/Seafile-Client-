@@ -453,6 +453,51 @@ namespace WinFormsApp3
             await OpenPreview(entry);
         }
 
+        private void CtxShare_Click(object sender, EventArgs e)
+        {
+            if (lstRepos.SelectedItems.Count != 1) return; // Nur Einzel-Freigabe supporten
+
+            var tag = lstRepos.SelectedItems[0].Tag;
+            string repoId = _navState.CurrentRepoId;
+            string path = "";
+            string name = lstRepos.SelectedItems[0].Text;
+            bool isDir = false;
+
+            if (tag is SeafileEntry entry)
+            {
+                if (entry.type == "back") return;
+
+                path = _navState.CurrentPath.EndsWith("/")
+                    ? _navState.CurrentPath + entry.name
+                    : _navState.CurrentPath + "/" + entry.name;
+                isDir = (entry.type == "dir");
+            }
+            else if (tag is SeafileRepo repo)
+            {
+                // Ganze Bibliothek freigeben (Technisch gesehen Root-Ordner "/")
+                repoId = repo.id;
+                path = "/";
+                isDir = true;
+                name = repo.name;
+            }
+            else
+            {
+                return;
+            }
+
+            // Form öffnen
+            try
+            {
+                // path muss bereinigt werden (keine doppelten Slashes)
+                path = path.Replace("//", "/");
+                new FrmShare(_seafileClient, repoId, path, name, isDir).ShowDialog();
+            }
+            catch (Exception ex)
+            {
+                UiHelper.ShowErrorDialog("Fehler", ex.Message);
+            }
+        }
+
         private async Task OpenPreview(SeafileEntry entry)
         {
             try
