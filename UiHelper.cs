@@ -5,6 +5,8 @@ using ReaLTaiizor.Manager;
 using ReaLTaiizor.Util;
 using System;
 using System.Drawing;
+using System.Reflection;
+using System.Runtime.InteropServices; // Wichtig für WinAPI
 using System.Windows.Forms;
 
 namespace WinFormsApp3
@@ -12,36 +14,60 @@ namespace WinFormsApp3
     public static class UiHelper
     {
         // ========================================================================
-        // LISTVIEW HELPERS
+        // WINAPI IMPORTS (Für den ultimativen Fix)
+        // ========================================================================
+        [DllImport("user32.dll")]
+        private static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, int lParam);
+
+        private const int LVM_SETEXTENDEDLISTVIEWSTYLE = 0x1036;
+        private const int LVS_EX_DOUBLEBUFFER = 0x00010000; // Nativer Double Buffer
+
+        // ========================================================================
+        // LISTVIEW SETUP
         // ========================================================================
         public static void SetupListView(MaterialListView listView, ImageList customIcons = null)
         {
-            var method = typeof(Control).GetMethod("SetStyle", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-            method?.Invoke(listView, new object[] { ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true });
-
+            // 1. Grundeinstellungen
             listView.View = View.Details;
             listView.OwnerDraw = true;
             listView.FullRowSelect = true;
             listView.GridLines = false;
             listView.Font = new Font("Segoe UI", 11f);
 
-            // --- FIX START: Hintergrund "hart" setzen ---
-            // Das verhindert das weiße Aufblitzen oder Quadrate in leeren Bereichen
-            listView.BackColor = Color.FromArgb(50, 50, 50);
+            Color darkBg = Color.FromArgb(50, 50, 50);
+            listView.BackColor = darkBg;
             listView.ForeColor = Color.WhiteSmoke;
-            // --- FIX ENDE ---
+
+            // 2. STYLES: Opaque ist PFLICHT gegen weiße Blitzer!
+            var method = typeof(Control).GetMethod("SetStyle", BindingFlags.NonPublic | BindingFlags.Instance);
+            if (method != null)
+            {
+                method.Invoke(listView, new object[] {
+                    ControlStyles.OptimizedDoubleBuffer |
+                    ControlStyles.AllPaintingInWmPaint |
+                    ControlStyles.ResizeRedraw |
+                    ControlStyles.Opaque, // VERBIETET Windows, den Hintergrund weiß zu löschen
+                    true
+                });
+            }
+
+            // 3. Nativer Double Buffer (Hilft oft besser als .NET Buffer bei ListViews)
+            SendMessage(listView.Handle, LVM_SETEXTENDEDLISTVIEWSTYLE, LVS_EX_DOUBLEBUFFER, LVS_EX_DOUBLEBUFFER);
 
             if (customIcons != null) listView.SmallImageList = customIcons;
 
+            // 4. Hover-Effekt Logik
             int hoveredIndex = -1;
             listView.MouseMove += (s, e) => {
                 var hit = listView.HitTest(e.Location);
                 int newIndex = (hit.Item != null) ? hit.Item.Index : -1;
                 if (newIndex != hoveredIndex)
                 {
-                    if (hoveredIndex != -1 && hoveredIndex < listView.Items.Count) listView.Invalidate(listView.Items[hoveredIndex].Bounds);
+                    if (hoveredIndex != -1 && hoveredIndex < listView.Items.Count)
+                        listView.Invalidate(listView.Items[hoveredIndex].Bounds);
                     hoveredIndex = newIndex;
-                    if (hoveredIndex != -1) listView.Invalidate(listView.Items[hoveredIndex].Bounds);
+                    if (hoveredIndex != -1)
+                        listView.Invalidate(listView.Items[hoveredIndex].Bounds);
                 }
             };
             listView.MouseLeave += (s, e) => {
@@ -52,73 +78,76 @@ namespace WinFormsApp3
                     if (old < listView.Items.Count) listView.Invalidate(listView.Items[old].Bounds);
                 }
             };
+
+            // 5. HEADER ZEICHNEN (Der "White Square" Killer)
             listView.DrawColumnHeader += (s, e) => {
                 Color headerBg = Color.FromArgb(45, 45, 48);
                 Color lineColor = Color.FromArgb(70, 70, 70);
-                using (var b = new SolidBrush(headerBg)) e.Graphics.FillRectangle(b, e.Bounds);
-                if (e.ColumnIndex == listView.Columns.Count - 1)
-                {
-                    int remainingWidth = listView.ClientRectangle.Width - e.Bounds.Right;
-                    if (remainingWidth > 0)
-                    {
-                        Rectangle filler = new Rectangle(e.Bounds.Right, e.Bounds.Y, remainingWidth, e.Bounds.Height);
-                        using (var b = new SolidBrush(headerBg)) e.Graphics.FillRectangle(b, filler);
-                        using (var p = new Pen(lineColor)) e.Graphics.DrawLine(p, filler.Left, filler.Bottom - 1, filler.Right, filler.Bottom - 1);
-                    }
-                }
-                using (var p = new Pen(lineColor)) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
+                // Normalen Header füllen
+                using (var b = new SolidBrush(headerBg))
+                    e.Graphics.FillRectangle(b, e.Bounds);
+
+                // Text & Linien
+                using (var p = new Pen(lineColor))
+                    e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
                 using (var f = new Font("Segoe UI", 11f, FontStyle.Bold))
                 {
                     Rectangle r = new Rectangle(e.Bounds.X + 10, e.Bounds.Y, e.Bounds.Width - 10, e.Bounds.Height);
                     TextRenderer.DrawText(e.Graphics, e.Header.Text, f, r, Color.White, TextFormatFlags.VerticalCenter | TextFormatFlags.Left);
                 }
+
+                // OVERDRAW: Den Bereich RECHTS neben der letzten Spalte füllen
+                // Das ist der Bereich, der beim Vergrößern oft weiß aufblitzt ("eklig verschieben")
+                if (e.ColumnIndex == listView.Columns.Count - 1)
+                {
+                    // Wir zeichnen einfach 4000 Pixel nach rechts weiter
+                    Rectangle filler = new Rectangle(e.Bounds.Right, e.Bounds.Y, 4000, e.Bounds.Height);
+                    using (var b = new SolidBrush(headerBg))
+                    {
+                        e.Graphics.FillRectangle(b, filler);
+                    }
+                    using (var p = new Pen(lineColor))
+                        e.Graphics.DrawLine(p, filler.Left, filler.Bottom - 1, filler.Right, filler.Bottom - 1);
+                }
             };
+
+            // 6. ITEM DRAWING (Wegen Opaque MÜSSEN wir alles füllen)
             listView.DrawItem += (s, e) => { e.DrawDefault = false; };
             listView.DrawSubItem += (s, e) => {
                 if (e.Item == null) return;
-
-                // 1. Drop Target ermitteln (via Tag)
                 int dropTargetIndex = (listView.Tag is int val) ? val : -1;
-
-                // 2. Hintergrundfarbe bestimmen
-                // Priority: DropTarget > Selected > Hover > Default
                 Color bg = (e.ItemIndex % 2 == 0) ? Color.FromArgb(53, 53, 53) : Color.FromArgb(50, 50, 50);
 
-                if (e.ItemIndex == dropTargetIndex)
-                {
-                    // HIGHLIGHT FARBE: Helleres Grau/Blau für das Drop-Ziel
-                    bg = Color.FromArgb(80, 80, 90);
-                }
-                else if (e.Item.Selected)
-                {
-                    bg = Color.FromArgb(75, 75, 75);
-                }
-                else if (e.ItemIndex == hoveredIndex)
-                {
-                    bg = Color.FromArgb(62, 62, 62);
-                }
+                if (e.ItemIndex == dropTargetIndex) bg = Color.FromArgb(80, 80, 90);
+                else if (e.Item.Selected) bg = Color.FromArgb(75, 75, 75);
+                else if (e.ItemIndex == hoveredIndex) bg = Color.FromArgb(62, 62, 62);
 
                 using (var b = new SolidBrush(bg))
                 {
                     e.Graphics.FillRectangle(b, e.Bounds);
+
+                    // Auch hier: Nach rechts überzeichnen beim letzten Item
                     if (e.ColumnIndex == listView.Columns.Count - 1)
                     {
-                        int remainingWidth = listView.ClientRectangle.Width - e.Bounds.Right;
-                        if (remainingWidth > 0)
-                        {
-                            Rectangle filler = new Rectangle(e.Bounds.Right, e.Bounds.Y, remainingWidth, e.Bounds.Height);
-                            e.Graphics.FillRectangle(b, filler);
-                            using (var p = new Pen(Color.FromArgb(60, 60, 60))) e.Graphics.DrawLine(p, filler.Left, filler.Bottom - 1, filler.Right, filler.Bottom - 1);
-                        }
+                        Rectangle filler = new Rectangle(e.Bounds.Right, e.Bounds.Y, 4000, e.Bounds.Height);
+                        e.Graphics.FillRectangle(b, filler);
+                        using (var p = new Pen(Color.FromArgb(60, 60, 60)))
+                            e.Graphics.DrawLine(p, filler.Left, filler.Bottom - 1, filler.Right, filler.Bottom - 1);
                     }
                 }
-                using (var p = new Pen(Color.FromArgb(60, 60, 60))) e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
+                using (var p = new Pen(Color.FromArgb(60, 60, 60)))
+                    e.Graphics.DrawLine(p, e.Bounds.Left, e.Bounds.Bottom - 1, e.Bounds.Right, e.Bounds.Bottom - 1);
+
                 if (e.ColumnIndex == 0)
                 {
                     int x = e.Bounds.X + 10;
                     if (listView.SmallImageList != null && !string.IsNullOrEmpty(e.Item.ImageKey) && listView.SmallImageList.Images.ContainsKey(e.Item.ImageKey))
                     {
-                        e.Graphics.DrawImage(listView.SmallImageList.Images[e.Item.ImageKey], x, e.Bounds.Y + 6, 20, 20);
+                        int yIcon = e.Bounds.Y + ((e.Bounds.Height - 20) / 2);
+                        e.Graphics.DrawImage(listView.SmallImageList.Images[e.Item.ImageKey], x, yIcon, 20, 20);
                         x += 32;
                     }
                     Rectangle r = new Rectangle(x, e.Bounds.Y, e.Bounds.Width - (x - e.Bounds.X), e.Bounds.Height);
@@ -134,37 +163,26 @@ namespace WinFormsApp3
         public static void UpdateColumnWidths(MaterialListView listView)
         {
             if (listView.Columns.Count < 2 || listView.ClientSize.Width <= 0) return;
-
             int fixedWidths = 0;
-            // Summiere alle Spalten außer der ersten (Name)
+            // Summiere alle Spalten außer der ersten
             for (int i = 1; i < listView.Columns.Count; i++) fixedWidths += listView.Columns[i].Width;
 
-            // FIX: -4 Pixel Puffer abziehen, damit die horizontale Scrollbar nicht triggert
-            int avail = listView.ClientSize.Width - fixedWidths - 4;
-
-            if (avail > 50) listView.Columns[0].Width = avail;
+            // Berechne verfügbaren Platz für Spalte 0
+            int avail = listView.ClientSize.Width - fixedWidths;
+            // WICHTIG: Kein Puffer (-4) mehr, da wir Opaque nutzen. 
+            // Aber um sicherzugehen, dass kein "Loch" entsteht:
+            if (avail > 50) listView.Columns[0].Width = avail - 2;
         }
 
         public static void UpdateTransferColumnWidths(MaterialListView listView)
         {
-            // Spaltenindexe: 0=Datei, 1=Status, 2=Rate, 3=Progress, 4=Startzeit
             if (listView.Columns.Count < 5 || listView.ClientSize.Width == 0) return;
-
-            // Wir wollen, dass Spalte 0 (Name) und Spalte 1 (Status) sich den Platz teilen,
-            // aber hier im Code war Spalte 1 (Status) die flexible.
-            // Lass uns Spalte 0 (Datei) zur flexiblen machen, das sieht meist besser aus.
-            // ODER wir reparieren deine Logik für Spalte 1. Ich bleibe bei deinem Design (Spalte 1 flexibel):
-
             int fixedWidth = listView.Columns[0].Width + listView.Columns[2].Width + listView.Columns[3].Width + listView.Columns[4].Width;
-
-            // FIX: Wir nehmen ClientSize.Width (das berücksichtigt die vertikale Scrollleiste bereits automatisch!)
-            // und ziehen einfach pauschal 4 Pixel ab als "Angst-Puffer".
-            // Die manuelle Berechnung mit SystemInformation.VerticalScrollBarWidth ist fehleranfällig und wurde entfernt.
             int availableWidth = listView.ClientSize.Width - fixedWidth - 4;
-
             if (availableWidth > 50) listView.Columns[1].Width = availableWidth;
         }
 
+        // --- Dialog Helpers (unverändert) ---
         public static string ShowInputDialog(string title, string hintText)
         {
             MaterialForm prompt = CreateBaseForm(title, 240);
@@ -172,8 +190,7 @@ namespace WinFormsApp3
             textBox.Hint = hintText;
             textBox.Location = new Point(20, 90);
             textBox.Width = 460;
-            textBox.Anchor = AnchorStyles.Top |
-                AnchorStyles.Left | AnchorStyles.Right;
+            textBox.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             MaterialButton btnOk = CreateButton("OK", DialogResult.OK, true, 390);
             MaterialButton btnCancel = CreateButton("Abbrechen", DialogResult.Cancel, false, 280);
             prompt.Controls.Add(textBox);
@@ -198,19 +215,14 @@ namespace WinFormsApp3
 
         public static void ShowErrorDialog(string title, string message)
         {
-            var scheme = new MaterialColorScheme(MaterialPrimary.Red500, MaterialPrimary.Red700, MaterialPrimary.Red200, MaterialAccent.Red400, MaterialTextShade.WHITE);
-            ShowGenericDialog(title, message, "VERSTANDEN", scheme);
+            ShowScrollableErrorDialog(title, message);
         }
 
         public static void ShowScrollableErrorDialog(string title, string message)
         {
             var skinManager = MaterialSkinManager.Instance;
             var oldScheme = skinManager.ColorScheme;
-
-            skinManager.ColorScheme = new MaterialColorScheme(
-                MaterialPrimary.Red500, MaterialPrimary.Red700,
-                MaterialPrimary.Red200, MaterialAccent.Red400,
-                MaterialTextShade.WHITE);
+            skinManager.ColorScheme = new MaterialColorScheme(MaterialPrimary.Red500, MaterialPrimary.Red700, MaterialPrimary.Red200, MaterialAccent.Red400, MaterialTextShade.WHITE);
             MaterialForm prompt = new MaterialForm();
             prompt.Width = 600;
             prompt.Height = 500;
@@ -242,9 +254,7 @@ namespace WinFormsApp3
             prompt.Controls.Add(btnOk);
             prompt.AcceptButton = btnOk;
             prompt.CancelButton = btnOk;
-
             prompt.ShowDialog();
-
             skinManager.ColorScheme = oldScheme;
         }
 
@@ -304,11 +314,13 @@ namespace WinFormsApp3
 
         private static void AddLabel(Form form, string text)
         {
-            MaterialLabel lbl = new MaterialLabel();
+            Label lbl = new Label();
             lbl.Text = text;
             lbl.Location = new Point(20, 80);
             lbl.Size = new Size(460, 100);
-            lbl.FontType = MaterialSkinManager.FontType.Body1;
+            lbl.Font = new Font("Segoe UI", 11f, FontStyle.Regular);
+            lbl.ForeColor = Color.WhiteSmoke;
+            lbl.BackColor = Color.Transparent;
             lbl.TextAlign = ContentAlignment.MiddleLeft;
             lbl.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             form.Controls.Add(lbl);
@@ -336,7 +348,8 @@ namespace WinFormsApp3
             decimal number = bytes;
             while (Math.Round(number / 1024) >= 1)
             {
-                number /= 1024; counter++;
+                number /= 1024;
+                counter++;
             }
             return string.Format("{0:n1} {1}", number, suffixes[counter]);
         }

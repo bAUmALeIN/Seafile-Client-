@@ -9,6 +9,7 @@ using System.Net.Http;
 using System.Net.Http.Headers;
 using System.Text;
 using System.Threading.Tasks;
+using WinFormsApp3.Data;
 
 namespace WinFormsApp3.Data
 {
@@ -63,7 +64,81 @@ namespace WinFormsApp3.Data
             }
         }
 
-        // HIER WAR DER FEHLER: Diese Methode fehlte
+        // --- HELPER: URL BEREINIGEN (Entfernt 'api2' für v2.1 Calls) ---
+        private string GetV2ApiUrl(string endpoint)
+        {
+            string baseUrl = AppConfig.ApiBaseUrl.TrimEnd('/');
+            if (baseUrl.EndsWith("api2")) baseUrl = baseUrl.Substring(0, baseUrl.Length - 4);
+            baseUrl = baseUrl.TrimEnd('/');
+            return $"{baseUrl}/{endpoint}";
+        }
+
+        public async Task<List<SeafileShareLink>> GetShareLinksAsync(string repoId, string path)
+        {
+            if (!path.StartsWith("/")) path = "/" + path;
+            string url = GetV2ApiUrl($"api/v2.1/share-links/?repo_id={repoId}&path={Uri.EscapeDataString(path)}");
+
+            var req = new HttpRequestMessage(HttpMethod.Get, url);
+            InjectBrowserHeaders(req);
+
+            var response = await _apiClient.SendAsync(req);
+            if (!response.IsSuccessStatusCode) return new List<SeafileShareLink>();
+
+            string json = await response.Content.ReadAsStringAsync();
+            // JSON Fix: Das Model SeafileShareLink kümmert sich um "permissions"
+            return JsonConvert.DeserializeObject<List<SeafileShareLink>>(json) ?? new List<SeafileShareLink>();
+        }
+
+        public async Task<string> CreateShareLinkAsync(string repoId, string path, string password = null, int expireDays = 0, bool canDownload = true)
+        {
+            if (!path.StartsWith("/")) path = "/" + path;
+
+            var formContent = new MultipartFormDataContent();
+            formContent.Add(new StringContent(repoId), "repo_id");
+            formContent.Add(new StringContent(path), "path");
+
+            if (!string.IsNullOrEmpty(password)) formContent.Add(new StringContent(password), "password");
+            if (expireDays > 0) formContent.Add(new StringContent(expireDays.ToString()), "expire_days");
+
+            // Permissions JSON
+            var permObj = new { can_edit = false, can_download = canDownload };
+            string permJson = JsonConvert.SerializeObject(permObj);
+            formContent.Add(new StringContent(permJson), "permissions");
+
+            string url = GetV2ApiUrl("api/v2.1/share-links/");
+            var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = formContent };
+            InjectBrowserHeaders(req);
+
+            var response = await _apiClient.SendAsync(req);
+            string json = await response.Content.ReadAsStringAsync();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                if (json.Contains("already exists")) throw new Exception("LINK_EXISTS");
+                throw new Exception($"Fehler ({response.StatusCode}):\n{json}");
+            }
+
+            var obj = JObject.Parse(json);
+            return obj["link"]?.ToString();
+        }
+
+        public async Task<bool> ShareToUserAsync(string repoId, string path, string userEmail, bool isDir, string permission = "rw")
+        {
+            if (!path.StartsWith("/")) path = "/" + path;
+            string endpoint = isDir ? "dir-shared-items" : "file-shared-items";
+            string url = GetV2ApiUrl($"api/v2.1/repos/{repoId}/{endpoint}/?p={Uri.EscapeDataString(path)}");
+
+            var formContent = new MultipartFormDataContent();
+            formContent.Add(new StringContent("user"), "share_type");
+            formContent.Add(new StringContent(userEmail), "username");
+            formContent.Add(new StringContent(permission), "permission");
+
+            var req = new HttpRequestMessage(HttpMethod.Put, url) { Content = formContent };
+            InjectBrowserHeaders(req);
+            return (await _apiClient.SendAsync(req)).IsSuccessStatusCode;
+        }
+
+        // --- Standard Methoden (unverändert, aber included für Vollständigkeit) ---
         public async Task<bool> RenameEntryAsync(string repoId, string path, bool isDir, string newName)
         {
             var content = new FormUrlEncodedContent(new[]
@@ -71,23 +146,15 @@ namespace WinFormsApp3.Data
                 new KeyValuePair<string, string>("operation", "rename"),
                 new KeyValuePair<string, string>("newname", newName)
             });
-
-            string url = isDir ?
-                $"repos/{repoId}/dir/?p={Uri.EscapeDataString(path)}" :
-                $"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}";
-
+            string url = isDir ? $"repos/{repoId}/dir/?p={Uri.EscapeDataString(path)}" : $"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}";
             var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = content };
             InjectBrowserHeaders(req);
-
             var response = await _apiClient.SendAsync(req);
             return response.IsSuccessStatusCode;
         }
 
-        public async Task<bool> MoveEntryAsync(string repoId, string srcPath, string dstDir, bool isDir, string dstRepoId = null)
-            => await ExecuteBatchOperationAsync("move", repoId, srcPath, dstDir, dstRepoId);
-
-        public async Task<bool> CopyEntryAsync(string repoId, string srcPath, string dstDir, bool isDir, string dstRepoId = null)
-            => await ExecuteBatchOperationAsync("copy", repoId, srcPath, dstDir, dstRepoId);
+        public async Task<bool> MoveEntryAsync(string repoId, string srcPath, string dstDir, bool isDir, string dstRepoId = null) => await ExecuteBatchOperationAsync("move", repoId, srcPath, dstDir, dstRepoId);
+        public async Task<bool> CopyEntryAsync(string repoId, string srcPath, string dstDir, bool isDir, string dstRepoId = null) => await ExecuteBatchOperationAsync("copy", repoId, srcPath, dstDir, dstRepoId);
 
         private async Task<bool> ExecuteBatchOperationAsync(string operation, string repoId, string srcPath, string dstDir, string dstRepoId)
         {
@@ -95,27 +162,17 @@ namespace WinFormsApp3.Data
             srcPath = srcPath.Replace("\\", "/").TrimEnd('/');
             if (dstDir.Length > 1 && dstDir.EndsWith("/")) dstDir = dstDir.TrimEnd('/');
             if (string.IsNullOrEmpty(dstDir)) dstDir = "/";
-
             int lastSlash = srcPath.LastIndexOf('/');
             string parentDir = lastSlash <= 0 ? "/" : srcPath.Substring(0, lastSlash);
             string objName = srcPath.Substring(lastSlash + 1);
 
-            var payloadObj = new
-            {
-                src_repo_id = repoId,
-                src_parent_dir = parentDir,
-                dst_repo_id = dstRepoId,
-                dst_parent_dir = dstDir,
-                src_dirents = new[] { objName }
-            };
-
+            var payloadObj = new { src_repo_id = repoId, src_parent_dir = parentDir, dst_repo_id = dstRepoId, dst_parent_dir = dstDir, src_dirents = new[] { objName } };
             string jsonBody = JsonConvert.SerializeObject(payloadObj);
             var content = new StringContent(jsonBody, Encoding.UTF8, "application/json");
 
             string baseUrl = AppConfig.ApiBaseUrl.TrimEnd('/');
             if (baseUrl.EndsWith("api2")) baseUrl = baseUrl.Substring(0, baseUrl.Length - 4);
             baseUrl = baseUrl.TrimEnd('/');
-
             string endpointOp = operation == "move" ? "sync-batch-move-item" : "sync-batch-copy-item";
             string url = $"{baseUrl}/api/v2.1/repos/{endpointOp}/";
 
@@ -126,12 +183,9 @@ namespace WinFormsApp3.Data
             var response = await _apiClient.SendAsync(request);
 
             if (response.IsSuccessStatusCode) return true;
-
             string error = await response.Content.ReadAsStringAsync();
             throw new Exception($"SyncBatchOp Failed ({response.StatusCode}): {error}");
         }
-
-        public void ReloadSettings() { _apiClient?.Dispose(); _fileDownloader?.Dispose(); InitializeClients(); }
 
         public async Task<List<SeafileRepo>> GetLibrariesAsync()
         {
@@ -190,18 +244,13 @@ namespace WinFormsApp3.Data
                 var req = new HttpRequestMessage(HttpMethod.Get, url);
                 InjectBrowserHeaders(req);
                 var resp = await _apiClient.SendAsync(req);
-                if (resp.IsSuccessStatusCode)
-                {
-                    using (var ms = new MemoryStream(await resp.Content.ReadAsByteArrayAsync())) return Image.FromStream(ms);
-                }
+                if (resp.IsSuccessStatusCode) { using (var ms = new MemoryStream(await resp.Content.ReadAsByteArrayAsync())) return Image.FromStream(ms); }
             }
             catch { }
             return null;
         }
 
-        public async Task<string> GetDownloadLinkAsync(string repoId, string path)
-             => SafeExtractString(await GetStringAsync($"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}&reuse=1"));
-
+        public async Task<string> GetDownloadLinkAsync(string repoId, string path) => SafeExtractString(await GetStringAsync($"repos/{repoId}/file/?p={Uri.EscapeDataString(path)}&reuse=1"));
         public async Task<string> GetUploadLinkAsync(string repoId, string path)
         {
             string json = await GetStringAsync($"repos/{repoId}/upload-link/?p={Uri.EscapeDataString(path)}");
@@ -224,12 +273,10 @@ namespace WinFormsApp3.Data
         {
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             InjectBrowserHeaders(request);
-
             using (var resp = await _fileDownloader.SendAsync(request, HttpCompletionOption.ResponseHeadersRead))
             {
                 if (!resp.IsSuccessStatusCode) throw new Exception($"Status: {resp.StatusCode}");
                 long total = resp.Content.Headers.ContentLength ?? 0;
-
                 using (var sRead = await resp.Content.ReadAsStreamAsync())
                 using (var sWrite = File.Open(localOutputPath, FileMode.Create))
                 {
@@ -260,17 +307,14 @@ namespace WinFormsApp3.Data
             {
                 WriteMultipartParam(contentStream, boundary, "parent_dir", parentDir);
                 WriteMultipartParam(contentStream, boundary, "replace", "0");
-
                 string fileHeader = $"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{fileName}\"\r\nContent-Type: application/octet-stream\r\n\r\n";
                 byte[] fileHeaderBytes = Encoding.UTF8.GetBytes(fileHeader);
                 contentStream.Write(fileHeaderBytes, 0, fileHeaderBytes.Length);
                 var request = new HttpRequestMessage(HttpMethod.Post, uploadLink);
                 InjectBrowserHeaders(request);
-
                 var combinedContent = new ManualMultipartContent(contentStream.ToArray(), fileStream, endBoundaryBytes, boundary, onProgress);
                 request.Content = combinedContent;
                 var response = await _fileDownloader.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
-
                 if (!response.IsSuccessStatusCode)
                 {
                     string rawError = await response.Content.ReadAsStringAsync();
@@ -321,87 +365,5 @@ namespace WinFormsApp3.Data
             if (!resp.IsSuccessStatusCode) throw new Exception($"API Error ({resp.StatusCode}): {content}");
             return content;
         }
-
-        public async Task<string> CreateShareLinkAsync(string repoId, string path, string password = null, int expireDays = 0)
-        {
-            // Der Pfad muss mit / beginnen, aber darf nicht nur / sein (außer Root, aber Root-Share ist oft gesperrt)
-            if (!path.StartsWith("/")) path = "/" + path;
-
-            var formContent = new MultipartFormDataContent();
-            formContent.Add(new StringContent(repoId), "repo_id");
-            formContent.Add(new StringContent(path), "path");
-
-            // Optional: Passwortschutz
-            if (!string.IsNullOrEmpty(password))
-            {
-                formContent.Add(new StringContent(password), "password");
-            }
-
-            // Optional: Ablaufdatum
-            if (expireDays > 0)
-            {
-                formContent.Add(new StringContent(expireDays.ToString()), "expire_days");
-            }
-
-            var req = new HttpRequestMessage(HttpMethod.Post, "api/v2.1/share-links/") { Content = formContent };
-            InjectBrowserHeaders(req);
-
-            var response = await _apiClient.SendAsync(req);
-            string json = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                throw new Exception($"Fehler beim Erstellen des Links: {response.StatusCode}\n{json}");
-            }
-
-            // JSON parsen: {"link": "https://seafile...", ...}
-            var obj = JObject.Parse(json);
-            return obj["link"]?.ToString();
-        }
-
-    }
-
-    public class ManualMultipartContent : HttpContent
-    {
-        private readonly byte[] _head;
-        private readonly Stream _fileStream;
-        private readonly byte[] _tail;
-        private readonly Action<long, long> _progress;
-        private readonly long _totalSize;
-        public ManualMultipartContent(byte[] head, Stream fileStream, byte[] tail, string boundary, Action<long, long> progress)
-        {
-            _head = head;
-            _fileStream = fileStream;
-            _tail = tail;
-            _progress = progress;
-            _totalSize = _head.Length + _fileStream.Length + _tail.Length;
-            Headers.TryAddWithoutValidation("Content-Type", "multipart/form-data; boundary=" + boundary);
-        }
-
-        protected override bool TryComputeLength(out long length)
-        {
-            length = _totalSize;
-            return true;
-        }
-
-        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
-        {
-            await stream.WriteAsync(_head, 0, _head.Length);
-            byte[] buffer = new byte[8192];
-            long bytesSent = _head.Length;
-            int bytesRead;
-
-            if (_fileStream.CanSeek) _fileStream.Position = 0;
-            while ((bytesRead = await _fileStream.ReadAsync(buffer, 0, buffer.Length)) > 0)
-            {
-                await stream.WriteAsync(buffer, 0, bytesRead);
-                bytesSent += bytesRead;
-                _progress?.Invoke(bytesSent, _totalSize);
-            }
-            await stream.WriteAsync(_tail, 0, _tail.Length);
-            _progress?.Invoke(_totalSize, _totalSize);
-        }
-
-       
     }
 }
