@@ -1,21 +1,24 @@
-# Seafile Client - BBS Me Hannover (Unofficial)
+# Seafile Client – BBS ME Hannover (inoffiziell)
 
 <div align="center">
   <img src="Resources/app_logo.png" alt="Seafile Client Logo" width="150">
   <br><br>
+<<<<<<< Updated upstream
   
   <img src="https://img.shields.io/badge/Version-v1.0%20(Beta)-orange?style=flat-square" alt="Version 1.0 Beta">
+=======
+
+  <img src="https://img.shields.io/badge/Version-v1.2.1%20(Beta)-orange?style=flat-square" alt="Version 1.2.1 Beta">
+>>>>>>> Stashed changes
   <img src="https://img.shields.io/badge/Platform-Windows-0078D6?style=flat-square&logo=windows" alt="Platform Windows">
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 8.0">
   <br><br>
 
-  <b>Ein leistungsstarker, inoffizieller Seafile-Client für die BBS Me Hannover.</b>
-  <br>
-  <i>Optimiert für das LARA Portal mit automatischem Single Sign-On (SSO).</i>
+  <b>Inoffizieller Windows-Client für den Seafile-Zugriff der BBS ME Hannover</b><br>
+  <i>Mit integriertem LARA-Login und optimierter Dateiverwaltung</i>
 </div>
 
-<br>
-
+---
 > [!NOTE]  
 >* **Dieses Projekt dient ausschließlich zu Lern- und Analysezwecken im Kontext von Client-Server-Authentifizierung.
 >*Es ist nicht für den produktiven Einsatz oder zur Umgehung administrativer Richtlinien gedacht**.**
@@ -24,74 +27,134 @@
 > **Status: Version 1.0 (Public Beta)** > Dies ist das erste Release. Es können noch Bugs oder unerwartete Fehler auftreten.  
 > Da ich dieses Projekt **neben der Abendschule** entwickle, bitte ich um etwas Geduld bei Fixes. Ich versuche aber, gemeldete Probleme so zeitnah wie möglich zu beheben!
 
-<br>
 
-## 📖 Über das Projekt
+## 📌 Projektübersicht
 
-Dies ist ein spezialisierter Windows-Desktop-Client für die Cloud-Infrastruktur der **Berufsbildenden Schule Metalltechnik • Elektrotechnik (BBS Me) Hannover**.
+Dieses Projekt ist ein **Windows-Desktop-Client (WinForms, .NET 8)** zur Nutzung der Seafile-Cloud der  
+**Berufsbildenden Schule Metalltechnik · Elektrotechnik (BBS ME) Hannover**.
 
-Standard-Clients scheitern oft an den komplexen SSO-Weiterleitungen des Schulportals. Dieser Client löst das Problem durch eine integrierte Browser-Engine (`WebView2`), die den Anmelde-Prozess über das **LARA Portal** automatisiert und den Zugriff auf Schuldateien nahtlos ermöglicht.
+Der Fokus liegt auf:
+- einer **nahtlosen Anmeldung über das LARA-Portal**
+- einer **übersichtlichen Datei- und Bibliotheksverwaltung**
+- stabilen **Up- und Download-Prozessen**
+- einer modernen, dunklen Benutzeroberfläche
 
-## ✨ Features & Highlights
+Das Projekt entstand im Rahmen von Lern- und Entwicklungszwecken und dient gleichzeitig als praxisnahes Beispiel für:
+- Client-Server-Kommunikation
+- Authentifizierung über WebView
+- asynchrone Dateiübertragung
+- strukturierte WinForms-Architektur
 
-### 🔐 Intelligenter Login (SSO)
-* **Auto-Pilot:** Der `AuthManager` nutzt ein injiziertes Skript, um automatisch durch die LARA-Anmeldeseiten zu navigieren und Buttons zu klicken.
-* **Token-Extraction:** Erkennt automatisch den `seahub_auth` Cookie aus dem Browser-Kontext und speichert ihn sicher lokal in einer SQLite-Datenbank.
+---
 
-### 🚀 Performance & Transfer
-* **Turbo-Download:** Der Client nutzt **Multithreading** (via `SemaphoreSlim`), um bis zu 5 Dateien gleichzeitig herunterzuladen. Das ist bei vielen kleinen Dateien deutlich schneller.
-* **Smart-ZIP:** Du kannst mehrere Ordner oder Dateien markieren – der Client packt sie serverseitig oder lokal zusammen und lädt **ein einziges ZIP-Archiv** herunter.
-* **Stabiler Upload:** Enthält einen eigenen `ManualMultipartContent`-Wrapper, um spezifische "400 Bad Request"-Fehler zu umgehen, die beim Standard-Upload oft auftreten.
+## 🔐 Anmeldung & Authentifizierung
 
-### 🎨 Moderne Benutzeroberfläche
-* **Dark Mode:** Komplett dunkles Design (basierend auf `ReaLTaiizor`) für angenehmes Arbeiten am Abend.
-* **Responsive UI:** Custom ListView mit eigens gezeichneten Headern und Icons.
-* **Status-Feedback:** Detaillierte Fortschrittsanzeige in Echtzeit.
+### LARA-SSO-Integration
+Die Anmeldung erfolgt über eine integrierte **WebView2-Komponente**, welche den regulären Login-Prozess des LARA-Portals abbildet.
 
-## 🐛 Bugs & Feedback
+Der Ablauf:
+1. Öffnen der LARA-Login-Seite in WebView2
+2. Automatisierte Navigation durch den Login-Prozess
+3. Erkennung und Extraktion des `seahub_auth` Cookies
+4. Lokale, verschlüsselte Speicherung des Tokens (SQLite)
 
-Fehler gefunden? Hast du eine Idee für ein neues Feature?
-Gerne einfach ein **Issue** hier auf GitHub erstellen!
+Die Authentifizierung wird vollständig im **`AuthManager`** gekapselt, sodass andere Komponenten ausschließlich mit gültigen Tokens arbeiten.
 
-Bitte gib dabei an:
-1. Was hast du gemacht?
-2. Was ist passiert (Fehlermeldung)?
-3. Welches Betriebssystem nutzt du?
+---
 
-*Ich schaue mir die Reports an, sobald es die Zeit neben der Schule zulässt.*
+## 📂 Datei- & Bibliotheksverwaltung
 
-## 🛠️ Technische Architektur
+### Bibliotheken
+- Anzeige aller eigenen, geteilten und Gruppen-Bibliotheken
+- Gruppierung nach Typ (Eigene / Freigegebene / Gruppen)
+- Erstellung und Löschung von Bibliotheken
 
-Das Projekt ist eine **Windows Forms** Anwendung basierend auf **.NET 8**.
+### Verzeichnisnavigation
+- Klassische Ordnerstruktur mit `.. [Zurück]`
+- Breadcrumb-Navigation
+- Zwischenspeicherung von Verzeichnisinhalten (Cache)
 
-| Komponente | Beschreibung |
-| :--- | :--- |
-| **AuthManager** | Steuert WebView2, injiziert JS für die LARA-Navigation und extrahiert Auth-Tokens. |
-| **DownloadManager** | Verwaltet die asynchronen Queues, ZIP-Logik und Fehlerbehandlung. |
-| **SeafileClient** | Eigener API-Wrapper mit manuellem HTTP-Request-Building für maximale Kompatibilität. |
-| **UIHelper** | Zentrale Verwaltung für Styles, Dialoge und das Custom-Drawing der Listen. |
-| **Datenbank** | SQLite (`Microsoft.Data.Sqlite`) zur lokalen Speicherung von Einstellungen. |
+### Dateitypen & Vorschau
+- Dynamische Dateisymbole basierend auf Dateiendung
+- Automatisches Laden von Vorschaubildern für Bilder (`jpg`, `png`, `gif`)
+- Asynchrones Thumbnail-Loading mit Abbruchlogik
+
+---
+
+## 🔄 Download- & Upload-Funktionen
+
+### Downloads
+- Einzeldateien
+- Ganze Ordner
+- Komplette Bibliotheken
+- Mehrfachauswahl als **ZIP-Archiv**
+
+Der **`DownloadManager`** nutzt:
+- parallele Downloads (Semaphore-basiert)
+- Fortschritts- & Statusmeldungen
+- Geschwindigkeitsberechnung
+
+### Uploads
+- Drag & Drop aus dem Windows Explorer
+- Unterstützung für mehrere Dateien und Ordner
+- Eigene Multipart-Implementierung zur Vermeidung von API-Problemen
+
+---
+
+## 📦 Verschieben & Organisation
+
+- Drag & Drop innerhalb der Verzeichnisstruktur
+- Verschieben von Dateien und Ordnern
+- Fallback-Mechanismus:
+  - Falls `Move` fehlschlägt → `Copy + Delete`
+- Sicherheitsabfragen vor kritischen Aktionen
+
+---
+
+## 🔍 Globale Suche
+
+- Bibliotheksübergreifende Dateisuche
+- Parallele Durchsuchung aller Bibliotheken
+- Gruppierte Suchergebnisse
+- Direkter Sprung zum Fundort
+
+---
+
+## 🎨 Benutzeroberfläche
+
+- Dark Mode (ReaLTaiizor)
+- Eigene ListView-Zeichnung
+- Kontextmenüs
+- Statusanzeigen & Snackbars
+- Responsive Spaltenanpassung
+
+---
+
+## 🧠 Technische Architektur
+
+| Komponente | Aufgabe |
+|----------|--------|
+| **AuthManager** | Login, WebView-Steuerung, Token-Verwaltung |
+| **SeafileClient** | API-Kommunikation, HTTP-Requests |
+| **DownloadManager** | Downloads, Uploads, ZIP-Logik |
+| **NavigationState** | Aktuelle Position & Pfadlogik |
+| **CacheManager** | Zwischenspeicherung von API-Daten |
+| **BreadcrumbManager** | Navigationsanzeige |
+| **UiHelper** | Dialoge, Icons, Styling |
+
+Lokale Daten werden mit **SQLite** gespeichert.
+
+---
 
 ## 🚀 Installation
 
 ### Voraussetzungen
-* Windows 10 oder 11 (64-Bit)
-* [.NET Desktop Runtime 8.0](https://dotnet.microsoft.com/en-us/download/dotnet/8.0)
-* Gültiger Account für das BBS Me LARA Portal.
+- Windows 10 oder 11 (64 Bit)
+- .NET Desktop Runtime 8.0
+- Gültiger LARA-Zugang der BBS ME Hannover
 
-### Einrichtung (Source Code)
-1.  **Repository klonen:**
-    ```bash
-    git clone [https://github.com/bAUmALeIN/Seafile-Client-.git](https://github.com/bAUmALeIN/Seafile-Client-.git)
-    ```
-2.  **In Visual Studio öffnen:**
-    Lade die Solution `WinFormsApp3.sln`.
-3.  **Starten:**
-    Beim ersten Start öffnet sich das eingebettete Browser-Fenster für den LARA-Login.
 
----
-
-## ⚠️ Disclaimer
+### ⚠️ Disclaimer
 
 Dies ist ein **inoffizielles Open-Source-Projekt** von Schülern.
 * Es besteht **keine offizielle Verbindung** zur BBS Me Hannover oder den Betreibern des LARA Portals.
@@ -100,3 +163,5 @@ Dies ist ein **inoffizielles Open-Source-Projekt** von Schülern.
 
 ---
 *Entwickelt mit ❤️ und C# für die Community der BBS Me.*
+
+

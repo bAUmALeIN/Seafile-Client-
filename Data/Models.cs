@@ -59,6 +59,8 @@ namespace WinFormsApp3.Data
         public string SpeedString { get; set; } = "-";
         public DateTime StartTime { get; set; } = DateTime.Now;
         public string ErrorMessage { get; set; }
+
+        public string LocalFilePath { get; set; }
         public object Tag { get; set; }
     }
 }

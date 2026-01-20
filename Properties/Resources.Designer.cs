@@ -193,6 +193,16 @@ namespace WinFormsApp3.Properties {
         /// <summary>
         ///   Sucht eine lokalisierte Ressource vom Typ System.Drawing.Bitmap.
         /// </summary>
+        internal static System.Drawing.Bitmap icon_rename {
+            get {
+                object obj = ResourceManager.GetObject("icon_rename", resourceCulture);
+                return ((System.Drawing.Bitmap)(obj));
+            }
+        }
+        
+        /// <summary>
+        ///   Sucht eine lokalisierte Ressource vom Typ System.Drawing.Bitmap.
+        /// </summary>
         internal static System.Drawing.Bitmap icon_repo {
             get {
                 object obj = ResourceManager.GetObject("icon_repo", resourceCulture);
