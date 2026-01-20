@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 8.0">
   <br><br>
 
-  <b>Ein leistungsstarker, inoffizieller Seafile-Client für die BBS Me Hannover.</b>
+  <b>Inoffizieller Seafile-Client für die BBS Me Hannover.</b>
   <br>
   <i>Optimiert für das LARA Portal mit automatischem Single Sign-On (SSO).</i>
 </div>
@@ -28,9 +28,7 @@
 
 ## 📖 Über das Projekt
 
-Dies ist ein spezialisierter Windows-Desktop-Client für die Cloud-Infrastruktur der **Berufsbildenden Schule Metalltechnik • Elektrotechnik (BBS Me) Hannover**.
-
-Standard-Clients scheitern oft an den komplexen SSO-Weiterleitungen des Schulportals. Dieser Client löst das Problem durch eine integrierte Browser-Engine (`WebView2`), die den Anmelde-Prozess über das **LARA Portal** automatisiert und den Zugriff auf Schuldateien nahtlos ermöglicht.
+Dies ist ein Windows-Desktop-Client für die Cloud-Infrastruktur der **Berufsbildenden Schule Metalltechnik • Elektrotechnik (BBS Me) Hannover**.
 
 ## ✨ Features & Highlights
 
@@ -82,7 +80,7 @@ Das Projekt ist eine **Windows Forms** Anwendung basierend auf **.NET 8**.
 ### Einrichtung (Source Code)
 1.  **Repository klonen:**
     ```bash
-    git clone [https://github.com/bAUmALeIN/Seafile-Client-.git](https://github.com/bAUmALeIN/Seafile-Client-.git)
+    git clone [https://github.com/bAUmALeIN/Seafile-Client-.git]
     ```
 2.  **In Visual Studio öffnen:**
     Lade die Solution `WinFormsApp3.sln`.
