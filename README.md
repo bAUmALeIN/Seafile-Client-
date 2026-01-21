@@ -21,6 +21,10 @@
 > Dieses Projekt ist eine **private Eigenentwicklung** zu Lernzwecken. Es steht in **keiner offiziellen Verbindung** zur BBS Me Hannover oder den Betreibern des LARA-Portals.  
 > Nutzung auf eigene Verantwortung. Bitte geht verantwortungsvoll mit der Infrastruktur der Schule um!
 
+>[!NOTE]
+> **Status: Version 1.5.0 (Public Beta)** > Dies ist das erste Release (V1.x.x). Es können noch Bugs oder unerwartete Fehler auftreten.  
+> Da ich dieses Projekt **neben der Abendschule** entwickle, bitte ich um etwas Geduld bei Fixes. Ich versuche aber, gemeldete Probleme so zeitnah wie möglich zu beheben!
+
 ---
 
 ## 👋 Moin! Worum geht's hier?
