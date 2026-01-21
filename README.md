@@ -25,7 +25,7 @@
 
 ## 👋 Moin! Worum geht's hier?
 
-Wer die Abendschule oder Ausbildung an der BBS Me besucht, kennt das LARA-Portal und die Seafile-Integration. Der offizielle Weg über den Browser funktioniert, aber als Software-Entwickler wollte ich mehr: **Mehr Speed, weniger Klicks und einen echten Dark Mode (für längere Abendeinsätze ;) ).**
+Wer die Abendschule oder Ausbildung an der BBS Me besucht, kennt das LARA-Portal und die Seafile-Integration. Der offizielle Weg über den Browser funktioniert, aber als Software-Entwickler wollte ich mehr: **Mehr Speed, weniger Klicks und einen echten Dark Mode (für längere Abendeinsätze 😉 ).**
 
 Dieser Client ist ein nativer Windows-Wrapper, der die Brücke zwischen dem komplexen LARA-Login und der Seafile-API schlägt. Er automatisiert das Anmeldeprozedere und bietet Funktionen, die im Webinterface fehlen oder umständlich sind.
 
